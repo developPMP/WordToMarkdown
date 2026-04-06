@@ -73,4 +73,5 @@ java -jar target/word-to-markdown.jar
 
 - La conversión se ejecuta en un hilo secundario (`SwingWorker`) para no bloquear la interfaz.
 - Cualquier advertencia generada por Mammoth durante la conversión se muestra en el panel de registro de la ventana.
-- Las imágenes embebidas en el documento se convierten a base64 inline (comportamiento por defecto de Mammoth).
+- Las imágenes del documento se extraen como archivos independientes en una carpeta `{nombre}_images/` junto al `.md`. Las referencias quedan como rutas relativas en el Markdown.
+- El texto alternativo (alt text) generado automáticamente por la IA de Microsoft Word (e.g. *"el contenido generado por IA puede ser incorrecto"*) es ignorado; en su lugar se usa un texto genérico (`imagen N`).
