@@ -1,9 +1,5 @@
 package com.wordtomarkdown;
 
-import com.vladsch.flexmark.html2md.converter.FlexmarkHtmlConverter;
-import org.zwobble.mammoth.DocumentConverter;
-import org.zwobble.mammoth.Result;
-
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileNameExtensionFilter;
@@ -11,18 +7,7 @@ import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.event.ActionEvent;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public class App extends JFrame {
@@ -35,6 +20,8 @@ public class App extends JFrame {
     private JRadioButton rbFile;
     private JRadioButton rbFolder;
     private boolean converting;
+
+    private final ConversionService service = new ConversionService();
 
     public App() {
         super("Word a Markdown - Conversor");
@@ -173,11 +160,11 @@ public class App extends JFrame {
             txtFilePath.setText(dropped.getAbsolutePath());
             btnConvert.setEnabled(true);
             log("Carpeta arrastrada: " + dropped.getAbsolutePath());
-            log("Documentos .docx encontrados: " + findDocxFiles(dropped).size());
+            log("Documentos .docx encontrados: " + service.findDocxFiles(dropped).size());
             return true;
         }
 
-        if (!dropped.getName().toLowerCase().endsWith(".docx")) {
+        if (!service.isDocx(dropped)) {
             log("Ignorado (no es un .docx): " + dropped.getName());
             return false;
         }
@@ -211,29 +198,11 @@ public class App extends JFrame {
             btnConvert.setEnabled(true);
             if (folderMode) {
                 log("Carpeta seleccionada: " + selected.getAbsolutePath());
-                log("Documentos .docx encontrados: " + findDocxFiles(selected).size());
+                log("Documentos .docx encontrados: " + service.findDocxFiles(selected).size());
             } else {
                 log("Archivo seleccionado: " + selected.getName());
             }
         }
-    }
-
-    /**
-     * Documentos .docx directamente contenidos en la carpeta, ordenados por nombre.
-     * Se ignoran los archivos temporales que Word deja al abrir un documento ("~$nombre.docx"),
-     * que no son documentos válidos.
-     */
-    private List<File> findDocxFiles(File folder) {
-        File[] files = folder.listFiles(f -> f.isFile()
-            && f.getName().toLowerCase().endsWith(".docx")
-            && !f.getName().startsWith("~$")
-            && !f.getName().startsWith("."));
-        if (files == null) {
-            return List.of();
-        }
-        return Arrays.stream(files)
-            .sorted(Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER))
-            .toList();
     }
 
     private void onConvert(ActionEvent e) {
@@ -254,7 +223,7 @@ public class App extends JFrame {
                 showError("La carpeta seleccionada no existe o no es válida.");
                 return;
             }
-            pending = findDocxFiles(input);
+            pending = service.findDocxFiles(input);
             if (pending.isEmpty()) {
                 showError("La carpeta no contiene ningún archivo .docx.");
                 return;
@@ -284,7 +253,9 @@ public class App extends JFrame {
                 int converted = 0;
                 int failed = 0;
                 for (File docx : pending) {
-                    if (convertOne(docx, out)) {
+                    ConversionResult result = service.convert(docx);
+                    report(result, out);
+                    if (result.success()) {
                         converted++;
                     } else {
                         failed++;
@@ -313,85 +284,33 @@ public class App extends JFrame {
         worker.execute();
     }
 
-    /** Convierte un único .docx a Markdown junto a él. Devuelve true si tuvo éxito. */
-    private boolean convertOne(File inputFile, Consumer<String> publish) {
-        // Determinar ruta de salida (.md con mismo nombre)
-        String baseName = inputFile.getName();
-        if (baseName.toLowerCase().endsWith(".docx")) {
-            baseName = baseName.substring(0, baseName.length() - 5);
+    /** Vuelca en el registro lo ocurrido con un documento. */
+    private void report(ConversionResult result, Consumer<String> publish) {
+        publish.accept("Convirtiendo: " + result.source().getName());
+        publish.accept("  Salida: " + result.output().getAbsolutePath());
+
+        if (!result.success()) {
+            publish.accept("  ERROR: " + result.errorMessage());
+            return;
         }
-        File outputFile = new File(inputFile.getParent(), baseName + ".md");
-        Path imageDir = Path.of(inputFile.getParent(), baseName + "_images");
-        final String finalBaseName = baseName;
 
-        publish.accept("Convirtiendo: " + inputFile.getName());
-        publish.accept("  Salida: " + outputFile.getAbsolutePath());
-
-        try {
-            AtomicInteger imageCounter = new AtomicInteger(0);
-
-            DocumentConverter converter = new DocumentConverter()
-                .imageConverter(image -> {
-                    Map<String, String> attrs = new HashMap<>();
-                    try {
-                        Files.createDirectories(imageDir);
-                        String mime = image.getContentType();
-                        String ext = mime.contains("/") ? mime.split("/")[1] : "png";
-                        // Normalizar algunos tipos MIME compuestos (e.g. "jpeg", "svg+xml")
-                        if (ext.contains("+")) ext = ext.split("\\+")[0];
-                        String imgName = "image" + imageCounter.incrementAndGet() + "." + ext;
-                        Path imgPath = imageDir.resolve(imgName);
-                        try (InputStream is = image.getInputStream()) {
-                            Files.copy(is, imgPath);
-                        }
-                        attrs.put("src", finalBaseName + "_images/" + imgName);
-                        // Usar alt text limpio: ignorar disclaimers de IA de Word
-                        image.getAltText()
-                            .map(String::trim)
-                            .filter(alt -> !alt.isBlank())
-                            .filter(alt -> !alt.toLowerCase().contains("ia puede ser"))
-                            .filter(alt -> !alt.toLowerCase().contains("generated by ai"))
-                            .filter(alt -> !alt.toLowerCase().contains("generado por ia"))
-                            .ifPresentOrElse(
-                                alt -> attrs.put("alt", alt),
-                                () -> attrs.put("alt", "imagen " + imageCounter.get())
-                            );
-                    } catch (IOException ex) {
-                        attrs.put("src", "");
-                        attrs.put("alt", "imagen " + imageCounter.incrementAndGet());
-                    }
-                    return attrs;
-                });
-
-            Result<String> htmlResult = converter.convertToHtml(inputFile);
-
-            String html = htmlResult.getValue();
-            Set<String> warnings = htmlResult.getWarnings();
-
-            if (!warnings.isEmpty()) {
-                publish.accept("  Advertencias durante la conversión:");
-                warnings.forEach(w -> publish.accept("    [!] " + w));
-            }
-
-            // Convertir HTML a Markdown
-            String markdown = FlexmarkHtmlConverter.builder().build().convert(html);
-
-            Files.writeString(
-                Path.of(outputFile.getAbsolutePath()),
-                markdown,
-                StandardCharsets.UTF_8
-            );
-
-            if (imageCounter.get() > 0) {
-                publish.accept("  Imágenes extraídas: " + imageCounter.get() + " → " + imageDir.getFileName() + "/");
-            }
-            publish.accept("  OK: " + outputFile.getName());
-            return true;
-
-        } catch (IOException ex) {
-            publish.accept("  ERROR: " + ex.getMessage());
-            return false;
+        if (!result.warnings().isEmpty()) {
+            publish.accept("  Advertencias durante la conversión:");
+            result.warnings().forEach(w -> publish.accept("    [!] " + w));
         }
+        if (result.imagesExtracted() > 0) {
+            publish.accept("  Imágenes extraídas: " + result.imagesExtracted()
+                + " → " + result.imageDir().getFileName() + "/");
+        }
+        if (result.hasImageErrors()) {
+            publish.accept("  No se pudieron extraer " + result.imageErrors().size() + " imagen(es):");
+            result.imageErrors().forEach(m -> publish.accept("    [!] " + m));
+        }
+
+        publish.accept("  OK: " + result.output().getName()
+            + (result.hasImageErrors()
+                ? " (con " + result.imageErrors().size() + " imagen(es) sin extraer)"
+                : ""));
     }
 
     /** Bloquea los controles mientras hay una conversión en curso. */

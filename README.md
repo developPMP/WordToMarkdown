@@ -33,11 +33,19 @@ documento.docx  →  [Mammoth]  →  HTML  →  [flexmark]  →  documento.md
 WordToMarkdown/
 ├── pom.xml
 └── src/
-    └── main/
-        └── java/
-            └── com/wordtomarkdown/
-                └── App.java
+    ├── main/java/com/wordtomarkdown/
+    │   ├── App.java                 Interfaz Swing (ventana, selección, registro)
+    │   ├── ConversionService.java   Lógica de conversión, sin dependencias de UI
+    │   └── ConversionResult.java    Resultado de convertir un documento
+    └── test/java/com/wordtomarkdown/
+        ├── ConversionServiceTest.java
+        ├── FindDocxFilesTest.java
+        └── DocxFixtures.java        Genera documentos .docx de prueba
 ```
+
+La lógica de conversión vive en `ConversionService`, separada de la ventana: no
+depende de Swing, devuelve el resultado como datos (`ConversionResult`) y es `App`
+quien decide cómo mostrarlo. Así puede probarse sin abrir la interfaz.
 
 ## Requisitos previos
 
@@ -46,9 +54,37 @@ WordToMarkdown/
 
 ## Compilar
 
+Antes de compilar, asegúrate de que Maven use Java 21.
+
+### macOS (zsh / bash)
+
 ```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+export PATH="$JAVA_HOME/bin:$PATH"
 mvn clean package
 ```
+
+### Git Bash (Windows)
+
+```bash
+export JAVA_HOME="/c/Program Files/Java/jdk-21"
+export PATH="$JAVA_HOME/bin:$PATH"
+mvn clean package
+```
+
+### PowerShell (Windows)
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Java\jdk-21"
+$env:Path = "$env:JAVA_HOME\\bin;$env:Path"
+mvn clean package
+```
+
+Si tu instalación de Java 21 está en otra ruta, sustituye el valor de `JAVA_HOME` por el correspondiente.
+
+Si Maven arranca con un JDK anterior, el build se detiene en la fase `validate`
+(mediante `maven-enforcer-plugin`) con un mensaje explícito indicando que hace falta
+JDK 21, en lugar del críptico `invalid target release: 21` del compilador.
 
 El JAR ejecutable se genera en:
 
@@ -61,6 +97,17 @@ target/word-to-markdown.jar
 ```bash
 java -jar target/word-to-markdown.jar
 ```
+
+## Tests
+
+```bash
+mvn test
+```
+
+Las pruebas (JUnit 5) cubren la selección de documentos en carpeta, el filtrado de
+temporales de Word, la conversión a Markdown, la extracción de imágenes y el
+comportamiento ante documentos ilegibles. Los `.docx` de prueba se generan al vuelo
+en carpetas temporales (`DocxFixtures`), por lo que no se versiona ningún binario.
 
 ## Uso
 
@@ -91,4 +138,5 @@ previa, y no se admiten arrastres mientras hay una conversión en curso.
 - La conversión se ejecuta en un hilo secundario (`SwingWorker`) para no bloquear la interfaz; durante el proceso los controles quedan deshabilitados.
 - Cualquier advertencia generada por Mammoth durante la conversión se muestra en el panel de registro de la ventana.
 - Las imágenes del documento se extraen como archivos independientes en una carpeta `{nombre}_images/` junto al `.md`. Las referencias quedan como rutas relativas en el Markdown.
+- Si una imagen concreta no se puede extraer, la conversión del documento continúa, pero el fallo **no pasa inadvertido**: se detalla en el registro (con número de imagen y causa), se resume en la línea de resultado del documento y en el Markdown queda marcada como `imagen N (no se pudo extraer)`.
 - El texto alternativo (alt text) generado automáticamente por la IA de Microsoft Word (e.g. *"el contenido generado por IA puede ser incorrecto"*) es ignorado; en su lugar se usa un texto genérico (`imagen N`).
