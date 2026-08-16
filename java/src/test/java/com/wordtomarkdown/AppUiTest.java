@@ -160,22 +160,21 @@ class AppUiTest {
     }
 
     @Test
-    @DisplayName("el botón Limpiar vacía el registro y se deshabilita")
-    void limpiarElRegistro(@TempDir Path folder) throws Exception {
+    @DisplayName("el botón Limpiar deja la ventana como recién abierta")
+    void limpiarRegistroYSeleccion(@TempDir Path folder) throws Exception {
         App app = nuevaVentana();
         Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
         app.applyDroppedPath(docx.toFile());
 
         assertTrue(app.isClearLogEnabled(), "con registro debe poder limpiarse");
 
-        app.clearLog();
+        app.clearAll();
 
         assertEquals("", app.logArea().getText());
-        assertFalse(app.isClearLogEnabled(), "sin registro no hay nada que limpiar");
+        assertEquals("", app.selectedPath(), "también se limpia la ruta seleccionada");
+        assertFalse(app.isConvertEnabled(), "sin selección no se puede convertir");
+        assertFalse(app.isClearLogEnabled(), "ya no queda nada que limpiar");
         assertFalse(app.isCopyLogEnabled(), "ni nada que copiar");
-        assertEquals(docx.toFile().getAbsolutePath(), app.selectedPath(),
-            "limpiar el registro no cambia la selección");
-        assertTrue(app.isConvertEnabled());
     }
 
     @Test
@@ -191,6 +190,8 @@ class AppUiTest {
         String registro = app.logArea().getText();
         assertTrue(registro.contains("Segundo.docx"), registro);
         assertFalse(registro.contains("Primero.docx"), "el registro anterior debe borrarse: " + registro);
+        assertEquals(segundo.toFile().getAbsolutePath(), app.selectedPath(),
+            "la ruta recién cargada se conserva");
     }
 
     @Test

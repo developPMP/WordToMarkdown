@@ -159,9 +159,13 @@ seleccionar y copiar de tres formas:
   selección) y *Seleccionar todo*.
 - **Teclado**: seleccionar con el ratón y `Cmd+C` / `Ctrl+C`.
 
-El botón **"Limpiar"** vacía el registro sin tocar la selección actual. Además se
-limpia solo al **elegir o arrastrar** otro archivo o carpeta y al **empezar** una
-conversión, de forma que lo que se ve siempre corresponde a lo último que se ha
+El botón **"Limpiar"** deja la ventana como recién abierta: vacía el registro y
+también la ruta seleccionada, con lo que la conversión vuelve a quedar
+deshabilitada.
+
+El registro se limpia además por su cuenta al **elegir o arrastrar** otro archivo
+o carpeta y al **empezar** una conversión —ahí la ruta no se toca, porque acaba de
+elegirse—, de forma que lo que se ve siempre corresponde a lo último que se ha
 hecho. Lo que se ignora al arrastrar (algo que no es un `.docx`) no borra nada:
 solo añade el aviso.
 

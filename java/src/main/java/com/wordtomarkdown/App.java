@@ -108,8 +108,8 @@ public class App extends JFrame {
 
         btnClearLog = new JButton("Limpiar");
         btnClearLog.setEnabled(false);
-        btnClearLog.setToolTipText("Vacía el área de registro");
-        btnClearLog.addActionListener(e -> clearLog());
+        btnClearLog.setToolTipText("Vacía el registro y la selección");
+        btnClearLog.addActionListener(e -> clearAll());
         bottomPanel.add(btnClearLog);
 
         btnCopyLog = new JButton("Copiar registro");
@@ -368,7 +368,7 @@ public class App extends JFrame {
         btnSelect.setEnabled(!busy);
         rbFile.setEnabled(!busy);
         rbFolder.setEnabled(!busy);
-        btnClearLog.setEnabled(!busy && !txtLog.getText().isEmpty());
+        updateClearState();
     }
 
     /** Menú del botón derecho sobre el registro. */
@@ -418,19 +418,36 @@ public class App extends JFrame {
         txtLog.append(message + "\n");
         txtLog.setCaretPosition(txtLog.getDocument().getLength());
         btnCopyLog.setEnabled(true);
-        btnClearLog.setEnabled(!converting);
+        updateClearState();
     }
 
     /**
-     * Vacía el registro. Se hace también al elegir un archivo o una carpeta y al
-     * empezar una conversión: lo que se ve siempre es lo último que se ha hecho.
+     * Vacía el registro. Se hace al elegir un archivo o una carpeta y al empezar
+     * una conversión: lo que se ve siempre es lo último que se ha hecho. La ruta
+     * seleccionada no se toca, porque en esos casos se acaba de elegir.
+     */
+    private void clearLog() {
+        txtLog.setText("");
+        btnCopyLog.setEnabled(false);
+        updateClearState();
+    }
+
+    /**
+     * Botón "Limpiar": deja la ventana como recién abierta, sin registro y sin
+     * selección.
      *
      * <p>Visible para las pruebas.
      */
-    void clearLog() {
-        txtLog.setText("");
-        btnCopyLog.setEnabled(false);
-        btnClearLog.setEnabled(false);
+    void clearAll() {
+        txtFilePath.setText("");
+        btnConvert.setEnabled(false);
+        clearLog();
+    }
+
+    /** Solo hay algo que limpiar si queda registro o una ruta seleccionada. */
+    private void updateClearState() {
+        btnClearLog.setEnabled(!converting
+            && !(txtLog.getText().isEmpty() && txtFilePath.getText().isEmpty()));
     }
 
     private void showError(String message) {
