@@ -8,6 +8,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.io.IOException;
@@ -33,6 +34,7 @@ public class App extends JFrame {
     private JLabel lblFile;
     private JRadioButton rbFile;
     private JRadioButton rbFolder;
+    private boolean converting;
 
     public App() {
         super("Word a Markdown - Conversor");
@@ -94,8 +96,14 @@ public class App extends JFrame {
         txtLog.setWrapStyleWord(true);
 
         JScrollPane scrollPane = new JScrollPane(txtLog);
-        scrollPane.setBorder(BorderFactory.createTitledBorder("Registro"));
+        scrollPane.setBorder(BorderFactory.createTitledBorder(
+            "Registro (o arrastre aquí un .docx o una carpeta)"));
         mainPanel.add(scrollPane, BorderLayout.CENTER);
+
+        // Arrastrar y soltar sobre el área de registro equivale a usar "Seleccionar..."
+        TransferHandler dropHandler = new PathDropHandler();
+        txtLog.setTransferHandler(dropHandler);
+        scrollPane.setTransferHandler(dropHandler);
 
         // Panel inferior: botón de conversión
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
@@ -112,9 +120,74 @@ public class App extends JFrame {
 
     /** Al cambiar de modo la ruta anterior deja de ser válida. */
     private void onModeChanged(ActionEvent e) {
-        lblFile.setText(rbFolder.isSelected() ? "Carpeta:" : "Archivo .docx:");
+        updateModeLabel();
         txtFilePath.setText("");
         btnConvert.setEnabled(false);
+    }
+
+    private void updateModeLabel() {
+        lblFile.setText(rbFolder.isSelected() ? "Carpeta:" : "Archivo .docx:");
+    }
+
+    /**
+     * Acepta archivos y carpetas soltados sobre el área de registro, con el mismo
+     * efecto que elegirlos desde el diálogo "Seleccionar...".
+     */
+    private class PathDropHandler extends TransferHandler {
+
+        @Override
+        public boolean canImport(TransferSupport support) {
+            return support.isDrop()
+                && !converting
+                && support.isDataFlavorSupported(DataFlavor.javaFileListFlavor);
+        }
+
+        @Override
+        public boolean importData(TransferSupport support) {
+            if (!canImport(support)) {
+                return false;
+            }
+            try {
+                @SuppressWarnings("unchecked")
+                List<File> dropped = (List<File>) support.getTransferable()
+                    .getTransferData(DataFlavor.javaFileListFlavor);
+                if (dropped.isEmpty()) {
+                    return false;
+                }
+                if (dropped.size() > 1) {
+                    log("Se soltaron " + dropped.size() + " elementos; se usa solo el primero.");
+                }
+                return applyDroppedPath(dropped.get(0));
+            } catch (Exception ex) {
+                log("No se pudo leer lo arrastrado: " + ex.getMessage());
+                return false;
+            }
+        }
+    }
+
+    /** Aplica la ruta arrastrada ajustando el tipo de selección al contenido soltado. */
+    private boolean applyDroppedPath(File dropped) {
+        if (dropped.isDirectory()) {
+            rbFolder.setSelected(true);
+            updateModeLabel();
+            txtFilePath.setText(dropped.getAbsolutePath());
+            btnConvert.setEnabled(true);
+            log("Carpeta arrastrada: " + dropped.getAbsolutePath());
+            log("Documentos .docx encontrados: " + findDocxFiles(dropped).size());
+            return true;
+        }
+
+        if (!dropped.getName().toLowerCase().endsWith(".docx")) {
+            log("Ignorado (no es un .docx): " + dropped.getName());
+            return false;
+        }
+
+        rbFile.setSelected(true);
+        updateModeLabel();
+        txtFilePath.setText(dropped.getAbsolutePath());
+        btnConvert.setEnabled(true);
+        log("Archivo arrastrado: " + dropped.getName());
+        return true;
     }
 
     private void onSelectFile(ActionEvent e) {
@@ -323,6 +396,7 @@ public class App extends JFrame {
 
     /** Bloquea los controles mientras hay una conversión en curso. */
     private void setUiBusy(boolean busy) {
+        converting = busy;
         btnConvert.setEnabled(!busy);
         btnSelect.setEnabled(!busy);
         rbFile.setEnabled(!busy);

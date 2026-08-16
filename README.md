@@ -72,6 +72,14 @@ java -jar target/word-to-markdown.jar
 4. Hacer clic en **Convertir a Markdown**.
 5. Cada archivo `.md` se genera automáticamente junto a su `.docx` de origen.
 
+### Arrastrar y soltar
+
+Como alternativa al diálogo, se puede arrastrar un `.docx` (o una carpeta) sobre el
+área de **Registro**: equivale a seleccionarlo, ajustando además el tipo de selección
+al contenido soltado —**Archivo** si es un documento, **Carpeta** si es un directorio—
+y rellenando la ruta. Lo que no sea un `.docx` se ignora sin alterar la selección
+previa, y no se admiten arrastres mientras hay una conversión en curso.
+
 ### Modo carpeta
 
 - Se procesan los `.docx` **directamente contenidos** en la carpeta; las subcarpetas no se recorren.
