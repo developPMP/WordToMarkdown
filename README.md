@@ -4,7 +4,7 @@ Aplicación de escritorio en **Java 21** con interfaz **Swing** que convierte do
 
 ## Descripción
 
-El usuario selecciona un archivo `.docx` mediante un diálogo de archivos. La aplicación genera un archivo `.md` con el mismo nombre en la misma carpeta del archivo de origen.
+El usuario elige, mediante un diálogo, un archivo `.docx` individual o una carpeta completa. La aplicación genera un archivo `.md` con el mismo nombre en la misma carpeta de cada documento de origen.
 
 ### Flujo de conversión
 
@@ -65,13 +65,22 @@ java -jar target/word-to-markdown.jar
 ## Uso
 
 1. Ejecutar la aplicación con el comando anterior.
-2. Hacer clic en **Seleccionar...** y elegir el archivo `.docx`.
-3. Hacer clic en **Convertir a Markdown**.
-4. El archivo `.md` se genera automáticamente en la misma carpeta que el `.docx`.
+2. Elegir el **tipo de selección** con los botones de opción superiores:
+   - **Archivo** (valor por defecto): convierte un único documento.
+   - **Carpeta**: convierte por lote todos los `.docx` de la carpeta elegida.
+3. Hacer clic en **Seleccionar...** y elegir el archivo o la carpeta.
+4. Hacer clic en **Convertir a Markdown**.
+5. Cada archivo `.md` se genera automáticamente junto a su `.docx` de origen.
+
+### Modo carpeta
+
+- Se procesan los `.docx` **directamente contenidos** en la carpeta; las subcarpetas no se recorren.
+- Se ignoran los archivos temporales que Word crea al tener un documento abierto (`~$nombre.docx`), que no son documentos válidos.
+- Si un documento falla, el lote continúa con los siguientes y al final se muestra un resumen con el total de conversiones correctas y con error.
 
 ## Notas
 
-- La conversión se ejecuta en un hilo secundario (`SwingWorker`) para no bloquear la interfaz.
+- La conversión se ejecuta en un hilo secundario (`SwingWorker`) para no bloquear la interfaz; durante el proceso los controles quedan deshabilitados.
 - Cualquier advertencia generada por Mammoth durante la conversión se muestra en el panel de registro de la ventana.
 - Las imágenes del documento se extraen como archivos independientes en una carpeta `{nombre}_images/` junto al `.md`. Las referencias quedan como rutas relativas en el Markdown.
 - El texto alternativo (alt text) generado automáticamente por la IA de Microsoft Word (e.g. *"el contenido generado por IA puede ser incorrecto"*) es ignorado; en su lugar se usa un texto genérico (`imagen N`).
