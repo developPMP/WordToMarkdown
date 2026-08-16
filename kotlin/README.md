@@ -1,4 +1,4 @@
-No míralos. Muchas personas no lo entienden soles de la televisión lo pasan y es algo muy fuerte, pasen a nuestro chico, en la respuesta que la matrimonio masivo que organiza la municipalidad en el parque zona del correspondiente, por ejemplo, yo me voy a casar el día a matrimonio masivo en el parque Sul Baitaca. Me dicho que no hay manera que no se va a casar en el Maita Capa, que yo le digo, no, pero es lo que corresponde. Yo soy el hijo de San Martigo Lichuch nos vamos a casar y no que yo me quiero casar en la iglesia del parque quién es o he vada y le digo que chuchando el casamento por yo te conocirvías en pocas y tú ya vamos a casa de tiraflor yo me toque la serie de baila en todo caso ya si el hogar tú lo case con el estómago que yo quiero que me pierda material parque la sábado pero he dicho majo me dice no que cuando vayas a pedirme la mano yo quiero que me pidas la mano en parido le voy a foda le digo que parís parís y le digo y todos pens la mano en un lugar icónico para nosotros no son pode# Word to Markdown — versión Kotlin
+# Word to Markdown — versión Kotlin
 
 Aplicación de escritorio en **Kotlin** con interfaz **Compose Multiplatform**
 que convierte documentos Word (`.docx`) a **Markdown** (`.md`).
@@ -61,6 +61,26 @@ de Gradle reutilizando resultados anteriores. Para forzar que todo se rehaga:
 ```bash
 ./gradlew build --rerun-tasks
 ```
+
+### Compilar en Windows
+
+```powershell
+.\gradlew.bat build
+```
+
+Si falla con `PKIX path building failed: unable to find valid certification path
+to requested target` —habitual detrás de un proxy corporativo o un antivirus que
+inspecciona HTTPS—, ejecútalo indicando a Java que confíe en el almacén de
+certificados de Windows:
+
+```powershell
+$env:JAVA_OPTS   = "-Djavax.net.ssl.trustStoreType=Windows-ROOT"
+$env:GRADLE_OPTS = "-Djavax.net.ssl.trustStoreType=Windows-ROOT"
+.\gradlew.bat build
+```
+
+Detalle completo y cómo dejarlo configurado de forma permanente en
+[Problemas conocidos](#pkix-path-building-failed-al-compilar-en-windows).
 
 ## Ejecutar
 
@@ -160,3 +180,50 @@ kotlin/
   Markdown como `imagen N (no se pudo extraer)`.
 - El alt text generado automáticamente por la IA de Word se descarta en favor de
   un texto genérico (`imagen N`).
+
+## Problemas conocidos
+
+### `PKIX path building failed` al compilar en Windows
+
+```
+PKIX path building failed: unable to find valid certification path to requested target
+```
+
+Java no usa el almacén de certificados de Windows, sino el suyo propio
+(`cacerts`, dentro del JDK). En equipos con un proxy corporativo o un antivirus
+que inspecciona HTTPS (Zscaler, Netskope, Fortinet, ESET…), el tráfico llega
+firmado por una CA que Windows reconoce pero Java no, y la descarga de
+dependencias falla.
+
+El proyecto ya lo contempla: [`settings.gradle.kts`](settings.gradle.kts) delega
+en el almacén de Windows cuando detecta ese sistema operativo, así que **la
+resolución de dependencias funciona sin configurar nada**.
+
+Si el error aparece **antes**, al descargar Gradle (`services.gradle.org`), el
+wrapper todavía no ha ejecutado ningún script y hay que indicárselo por entorno:
+
+```powershell
+$env:JAVA_OPTS   = "-Djavax.net.ssl.trustStoreType=Windows-ROOT"
+$env:GRADLE_OPTS = "-Djavax.net.ssl.trustStoreType=Windows-ROOT"
+.\gradlew.bat build
+```
+
+Para dejarlo fijo en el equipo, en `%USERPROFILE%\.gradle\gradle.properties`:
+
+```properties
+org.gradle.jvmargs=-Xmx3g -Dfile.encoding=UTF-8 -Djavax.net.ssl.trustStoreType=Windows-ROOT
+```
+
+> Esa configuración va en la carpeta de usuario, **no** en el `gradle.properties`
+> del proyecto: `Windows-ROOT` no existe en macOS ni Linux y rompería el build en
+> esas plataformas.
+
+Alternativa definitiva: exportar la CA corporativa desde `certmgr.msc` e
+importarla al JDK (como administrador, contraseña por defecto `changeit`):
+
+```powershell
+keytool -importcert -cacerts -alias corporativa -file ca.cer
+```
+
+Y si solo quieres **usar** la aplicación, no hace falta compilar en Windows: el
+[JAR para Windows 11](#jar-para-windows-11) es autónomo y no necesita red.
