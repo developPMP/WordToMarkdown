@@ -1,5 +1,6 @@
 package com.wordtomarkdown;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -96,8 +97,13 @@ public class MarkdownCleaner {
         if (markdown == null || markdown.isBlank()) {
             return "";
         }
+        // Los acentos y la eñe pueden venir descompuestos ("o" + tilde suelta),
+        // que es válido pero muchos editores lo pintan mal y no deja buscar el
+        // texto. Se recomponen en un solo carácter (forma NFC).
+        String text = Normalizer.normalize(markdown, Normalizer.Form.NFC);
+
         List<String> lines = new ArrayList<>(List.of(
-            markdown.replace("\r\n", "\n").replace("\r", "\n").split("\n", -1)));
+            text.replace("\r\n", "\n").replace("\r", "\n").split("\n", -1)));
 
         Map<String, String> numbersBySlug = new LinkedHashMap<>();
         Map<String, String> targets = stripAnchors(lines, new HeadingNumbers(headingNumbers), numbersBySlug);

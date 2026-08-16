@@ -197,6 +197,28 @@ class MarkdownCleanerTest {
     }
 
     @Test
+    @DisplayName("recompone las tildes y la eñe que vienen descompuestas")
+    void acentosDescompuestos() {
+        // Los mismos textos, pero con la tilde y la virgulilla como carácter aparte
+        String descompuesto = "# Introduccio\u0301n y Disen\u0303o\n\nAn\u0303o.\n";
+
+        String clean = cleaner.clean(descompuesto);
+
+        assertEquals("# Introducción y Diseño\n\nAño.\n", clean);
+        assertFalse(clean.contains("\u0301"), "no debe quedar ninguna tilde suelta");
+        assertFalse(clean.contains("\u0303"), "ni ninguna virgulilla suelta");
+    }
+
+    @Test
+    @DisplayName("el destino de un encabezado con tilde no depende de cómo venga escrita")
+    void anclaConTildeDescompuesta() {
+        String clean = cleaner.clean("# {#_Toc1}Introduccio\u0301n\n\n[ver](#_Toc1)\n");
+
+        assertTrue(clean.contains("# Introducción"), clean);
+        assertTrue(clean.contains("[ver](#introducción)"), clean);
+    }
+
+    @Test
     @DisplayName("un Markdown vacío o nulo no rompe la conversión")
     void entradaVacia() {
         assertEquals("", cleaner.clean(null));
