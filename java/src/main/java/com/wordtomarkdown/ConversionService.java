@@ -66,6 +66,7 @@ public class ConversionService {
         .toImmutable();
 
     private final MarkdownCleaner cleaner = new MarkdownCleaner();
+    private final WordNumbering numbering = new WordNumbering();
 
     /** true si el archivo es un documento Word convertible. */
     public boolean isDocx(File file) {
@@ -150,7 +151,11 @@ public class ConversionService {
             String markdown = FlexmarkHtmlConverter.builder(MARKDOWN_OPTIONS)
                 .build()
                 .convert(htmlResult.getValue());
-            Files.writeString(output.toPath(), cleaner.clean(markdown), StandardCharsets.UTF_8);
+
+            // La numeración automática de los encabezados ("3.1") no está en el
+            // texto: hay que leerla del propio .docx y devolvérsela al Markdown.
+            String clean = cleaner.clean(markdown, numbering.readFrom(docx));
+            Files.writeString(output.toPath(), clean, StandardCharsets.UTF_8);
 
             return new ConversionResult(
                 docx, output, true, null,

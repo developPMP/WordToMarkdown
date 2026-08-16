@@ -41,10 +41,12 @@ WordToMarkdown/
     │   ├── ConversionResult.java    Resultado de convertir un documento
     │   ├── ConversionReporter.java  Traduce el resultado a líneas de registro
     │   ├── MarkdownCleaner.java     Ajusta el Markdown generado (tablas, índice...)
+    │   ├── WordNumbering.java       Reconstruye la numeración automática (1, 1.1, 1.1.1)
     │   └── SelectionPolicy.java     Decide qué hacer con una ruta arrastrada
     └── test/java/com/wordtomarkdown/
         ├── ConversionServiceTest.java
         ├── MarkdownCleanerTest.java
+        ├── WordNumberingTest.java
         ├── FindDocxFilesTest.java
         ├── ConversionReporterTest.java
         ├── SelectionPolicyTest.java
@@ -196,6 +198,14 @@ en un visor de Markdown. `MarkdownCleaner` corrige estos:
   texto, y los enlaces que apuntaban a ellos se reapuntan al encabezado
   correspondiente para que el índice siga siendo navegable. Si un enlace se queda
   sin destino, se conserva el texto y se descarta el enlace.
+- **Numeración automática.** Cuando los apartados se numeran con una lista
+  multinivel enlazada a los estilos de título (`1`, `1.1`, `3.3.1.1`), ese número
+  **no está en el texto**: Word solo guarda a qué lista y nivel pertenece cada
+  párrafo y lo pinta al mostrarlo, así que Mammoth no lo emite y los encabezados
+  llegarían sin numerar. `WordNumbering` lee `numbering.xml` del `.docx`, calcula
+  el número de cada encabezado y se lo devuelve al Markdown; el índice hereda esa
+  numeración si no la traía ya escrita. Los encabezados sin lista asociada se
+  dejan tal cual.
 - **Títulos y encabezados.** El estilo *Título* del documento pasa a ser un
   encabezado de nivel 1, y todos los encabezados se escriben con almohadilla
   (`# Título`) en lugar de subrayados. También se reconocen los nombres de estilo

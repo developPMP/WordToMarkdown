@@ -83,16 +83,27 @@ public class MarkdownCleaner {
 
     /** Limpia el Markdown recién generado. Nunca devuelve {@code null}. */
     public String clean(String markdown) {
+        return clean(markdown, List.of());
+    }
+
+    /**
+     * Limpia el Markdown y devuelve a los encabezados la numeración automática
+     * del documento Word, que Mammoth no llega a escribir.
+     *
+     * @param headingNumbers numeración de los encabezados, en orden de aparición
+     */
+    public String clean(String markdown, List<WordNumbering.NumberedHeading> headingNumbers) {
         if (markdown == null || markdown.isBlank()) {
             return "";
         }
         List<String> lines = new ArrayList<>(List.of(
             markdown.replace("\r\n", "\n").replace("\r", "\n").split("\n", -1)));
 
-        Map<String, String> targets = stripAnchors(lines);
+        Map<String, String> numbersBySlug = new LinkedHashMap<>();
+        Map<String, String> targets = stripAnchors(lines, new HeadingNumbers(headingNumbers), numbersBySlug);
         retargetInternalLinks(lines, targets);
         repairTables(lines);
-        List<String> compacted = compactIndex(lines);
+        List<String> compacted = compactIndex(lines, numbersBySlug);
         return normalizeSpacing(compacted);
     }
 
@@ -103,7 +114,9 @@ public class MarkdownCleaner {
      *
      * <p>Modifica la lista recibida.
      */
-    private Map<String, String> stripAnchors(List<String> lines) {
+    private Map<String, String> stripAnchors(List<String> lines,
+                                             HeadingNumbers numbers,
+                                             Map<String, String> numbersBySlug) {
         Map<String, String> targets = new LinkedHashMap<>();
         Set<String> usedSlugs = new HashSet<>();
 
@@ -112,7 +125,16 @@ public class MarkdownCleaner {
             Matcher heading = HEADING.matcher(line);
             if (heading.matches()) {
                 String text = ANCHOR.matcher(heading.group(2)).replaceAll("").trim();
+
+                // La numeración va delante del texto y forma parte del destino
+                String number = numbers.numberFor(text);
+                if (number != null) {
+                    text = number + " " + text;
+                }
                 String slug = uniqueSlugOf(text, usedSlugs);
+                if (number != null) {
+                    numbersBySlug.put(slug, number);
+                }
                 Matcher anchors = ANCHOR.matcher(heading.group(2));
                 while (anchors.find()) {
                     targets.put(anchors.group(1), slug);
@@ -125,6 +147,55 @@ public class MarkdownCleaner {
             }
         }
         return targets;
+    }
+
+    /**
+     * Va repartiendo la numeración del documento entre los encabezados del
+     * Markdown, emparejándolos por texto y en orden.
+     *
+     * <p>No todos los encabezados están numerados, así que no vale con ir por
+     * posición. Se admite saltarse unos pocos por si alguno no casa (Mammoth
+     * puede reescribir el texto), pero no más: si no, un título repetido más
+     * adelante se quedaría con el número que no le toca.
+     */
+    private static final class HeadingNumbers {
+
+        /** Cuántos encabezados numerados se pueden saltar buscando el que casa. */
+        private static final int LOOKAHEAD = 3;
+
+        /** Numeración ya escrita en el texto del documento: "3.1 Alcance". */
+        private static final Pattern ALREADY_NUMBERED = Pattern.compile("^\\d+(?:\\.\\d+)*[.)]?\\s");
+
+        private final List<WordNumbering.NumberedHeading> pending;
+        private int position;
+
+        HeadingNumbers(List<WordNumbering.NumberedHeading> pending) {
+            this.pending = pending == null ? List.of() : pending;
+        }
+
+        /** Número que corresponde al encabezado, o null si no le toca ninguno. */
+        String numberFor(String headingText) {
+            if (position >= pending.size() || ALREADY_NUMBERED.matcher(headingText).find()) {
+                return null;
+            }
+            String wanted = comparable(headingText);
+            int limit = Math.min(pending.size(), position + LOOKAHEAD);
+            for (int i = position; i < limit; i++) {
+                if (comparable(pending.get(i).text()).equals(wanted)) {
+                    position = i + 1;
+                    return pending.get(i).number();
+                }
+            }
+            return null;
+        }
+
+        /** Texto comparable: sin el formato que añade Markdown ni espacios de más. */
+        private String comparable(String text) {
+            return text.replaceAll("[*_`\\\\]", "")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toLowerCase(Locale.ROOT);
+        }
     }
 
     /**
@@ -193,11 +264,11 @@ public class MarkdownCleaner {
      * línea, sin el número de página del documento original y con la sangría que
      * corresponde a su numeración (3 → 3.1 → 3.1.1 ...).
      */
-    private List<String> compactIndex(List<String> lines) {
+    private List<String> compactIndex(List<String> lines, Map<String, String> numbersBySlug) {
         List<String> result = new ArrayList<>(lines.size());
         int i = 0;
         while (i < lines.size()) {
-            IndexBlock block = readIndexBlock(lines, i);
+            IndexBlock block = readIndexBlock(lines, i, numbersBySlug);
             if (block.isEmpty()) {
                 result.add(lines.get(i));
                 i++;
@@ -214,7 +285,7 @@ public class MarkdownCleaner {
      * que Word deja entre entradas. Devuelve un bloque vacío si lo que hay ahí
      * no reúne evidencia suficiente de ser un índice.
      */
-    private IndexBlock readIndexBlock(List<String> lines, int from) {
+    private IndexBlock readIndexBlock(List<String> lines, int from, Map<String, String> numbersBySlug) {
         List<IndexEntry> entries = new ArrayList<>();
         int linked = 0;
         int numbered = 0;
@@ -231,7 +302,7 @@ public class MarkdownCleaner {
             Matcher numeral = NUMBERED_INDEX_ENTRY.matcher(lines.get(i));
             IndexEntry entry;
             if (link.matches()) {
-                entry = entryOf(link.group(1), link.group(2), link.group(3));
+                entry = entryOf(link.group(1), numbered(link.group(2), numbersBySlug), link.group(3));
                 linked++;
             } else if (numeral.matches()) {
                 entry = entryOf(numeral.group(1), numeral.group(2), numeral.group(3));
@@ -261,6 +332,24 @@ public class MarkdownCleaner {
             previous = level;
         }
         return stepwise;
+    }
+
+    /**
+     * Añade a la entrada del índice la numeración del encabezado al que enlaza,
+     * si el documento no la traía ya escrita en el texto.
+     */
+    private String numbered(String entry, Map<String, String> numbersBySlug) {
+        Matcher link = INTERNAL_LINK.matcher(entry);
+        if (numbersBySlug.isEmpty() || !link.matches()) {
+            return entry;
+        }
+        String number = numbersBySlug.get(link.group(2));
+        String text = link.group(1);
+        // Si el índice de Word ya traía su numeración escrita, se respeta la suya
+        if (number == null || HeadingNumbers.ALREADY_NUMBERED.matcher(text).find()) {
+            return entry;
+        }
+        return "[" + number + " " + text + "](#" + link.group(2) + ")";
     }
 
     private IndexEntry entryOf(String indent, String content, String page) {

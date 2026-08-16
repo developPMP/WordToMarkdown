@@ -144,6 +144,28 @@ class ConversionServiceTest {
     }
 
     @Test
+    @DisplayName("devuelve a los encabezados la numeración automática de Word")
+    void recuperaLaNumeracionAutomatica(@TempDir Path folder) throws IOException {
+        Path docx = DocxFixtures.documentWithAutomaticNumbering(folder, "Numerado.docx");
+
+        ConversionResult result = service.convert(docx.toFile());
+        String markdown = Files.readString(result.output().toPath(), StandardCharsets.UTF_8);
+
+        // El número no está en el texto del .docx: lo pinta Word a partir de la lista
+        assertTrue(markdown.contains("# 1 Introduccion"), markdown);
+        assertTrue(markdown.contains("# 2 Analisis"), markdown);
+        assertTrue(markdown.contains("## 2.1 Alcance"), markdown);
+        assertTrue(markdown.contains("### 2.1.1 Riesgos"), markdown);
+        assertTrue(markdown.contains("#### Anexo sin numerar"), "el no numerado se deja igual: " + markdown);
+
+        // Y el índice hereda esa numeración, con enlaces que siguen apuntando bien
+        assertTrue(markdown.contains("""
+            - [1 Introduccion](#1-introduccion)
+            - [2 Analisis](#2-analisis)
+              - [2.1 Alcance](#21-alcance)"""), markdown);
+    }
+
+    @Test
     @DisplayName("un documento ilegible falla sin dejar Markdown a medias")
     void documentoCorrupto(@TempDir Path folder) throws IOException {
         Path docx = DocxFixtures.corruptDocument(folder, "Corrupto.docx");

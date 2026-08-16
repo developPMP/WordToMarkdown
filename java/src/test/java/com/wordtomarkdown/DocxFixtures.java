@@ -27,7 +27,23 @@ final class DocxFixtures {
         <Default Extension="png" ContentType="image/png"/>
         <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
         <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+        <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
         </Types>""";
+
+    /**
+     * Lista multinivel "1 / 1.1 / 1.1.1", como la que Word enlaza a los estilos
+     * de título. El número no aparece en el texto: se calcula al mostrarlo.
+     */
+    private static final String NUMBERING = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:abstractNum w:abstractNumId="7">
+        <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1"/></w:lvl>
+        <w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1.%2"/></w:lvl>
+        <w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1.%2.%3"/></w:lvl>
+        </w:abstractNum>
+        <w:num w:numId="3"><w:abstractNumId w:val="7"/></w:num>
+        </w:numbering>""";
 
     /**
      * Estilos con el nombre canónico que guarda el .docx (en inglés aunque Word
@@ -42,6 +58,26 @@ final class DocxFixtures {
         <w:style w:type="paragraph" w:styleId="TDC1"><w:name w:val="toc 1"/></w:style>
         <w:style w:type="paragraph" w:styleId="TDC2"><w:name w:val="toc 2"/></w:style>
         <w:style w:type="paragraph" w:styleId="TDC3"><w:name w:val="toc 3"/></w:style>
+        </w:styles>""";
+
+    /**
+     * Los mismos estilos, pero con los títulos enlazados a la lista multinivel,
+     * que es como Word numera los apartados de un documento.
+     */
+    private static final String NUMBERED_STYLES = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:style w:type="paragraph" w:styleId="Ttulo"><w:name w:val="Title"/></w:style>
+        <w:style w:type="paragraph" w:styleId="TDC1"><w:name w:val="toc 1"/></w:style>
+        <w:style w:type="paragraph" w:styleId="TDC2"><w:name w:val="toc 2"/></w:style>
+        <w:style w:type="paragraph" w:styleId="TDC3"><w:name w:val="toc 3"/></w:style>
+        <w:style w:type="paragraph" w:styleId="Ttulo1"><w:name w:val="heading 1"/>
+          <w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="3"/></w:numPr></w:pPr></w:style>
+        <w:style w:type="paragraph" w:styleId="Ttulo2"><w:name w:val="heading 2"/>
+          <w:pPr><w:numPr><w:ilvl w:val="1"/><w:numId w:val="3"/></w:numPr></w:pPr></w:style>
+        <w:style w:type="paragraph" w:styleId="Ttulo3"><w:name w:val="heading 3"/>
+          <w:pPr><w:numPr><w:ilvl w:val="2"/><w:numId w:val="3"/></w:numPr></w:pPr></w:style>
+        <w:style w:type="paragraph" w:styleId="Ttulo4"><w:name w:val="heading 4"/></w:style>
         </w:styles>""";
 
     private static final String ROOT_RELS = """
@@ -122,6 +158,34 @@ final class DocxFixtures {
             <w:r><w:tab/><w:t>%d</w:t></w:r></w:p>""".formatted(level, bookmark, text, page);
     }
 
+    /**
+     * Documento con numeración automática de encabezados: la lista multinivel
+     * enlazada a los estilos de título, como la que aplica Word. El número no
+     * está en el texto de los párrafos, hay que calcularlo.
+     */
+    static Path documentWithAutomaticNumbering(Path folder, String fileName) throws IOException {
+        String body = """
+            <w:p><w:pPr><w:pStyle w:val="Ttulo"/></w:pPr><w:r><w:t>Manual numerado</w:t></w:r></w:p>
+            %s
+            %s
+            %s
+            <w:p><w:pPr><w:pStyle w:val="Ttulo1"/></w:pPr>
+              <w:bookmarkStart w:id="1" w:name="_Toc20"/><w:r><w:t>Introduccion</w:t></w:r><w:bookmarkEnd w:id="1"/></w:p>
+            <w:p><w:pPr><w:pStyle w:val="Ttulo1"/></w:pPr>
+              <w:bookmarkStart w:id="2" w:name="_Toc21"/><w:r><w:t>Analisis</w:t></w:r><w:bookmarkEnd w:id="2"/></w:p>
+            <w:p><w:pPr><w:pStyle w:val="Ttulo2"/></w:pPr>
+              <w:bookmarkStart w:id="3" w:name="_Toc22"/><w:r><w:t>Alcance</w:t></w:r><w:bookmarkEnd w:id="3"/></w:p>
+            <w:p><w:pPr><w:pStyle w:val="Ttulo3"/></w:pPr>
+              <w:bookmarkStart w:id="4" w:name="_Toc23"/><w:r><w:t>Riesgos</w:t></w:r><w:bookmarkEnd w:id="4"/></w:p>
+            <w:p><w:pPr><w:pStyle w:val="Ttulo4"/></w:pPr><w:r><w:t>Anexo sin numerar</w:t></w:r></w:p>
+            """.formatted(
+            indexEntry(1, "_Toc20", "Introduccion", 2),
+            indexEntry(1, "_Toc21", "Analisis", 3),
+            indexEntry(2, "_Toc22", "Alcance", 4));
+
+        return write(folder.resolve(fileName), document(body), null, NUMBERED_STYLES);
+    }
+
     /** Archivo con extensión .docx pero contenido que no es un paquete OOXML. */
     static Path corruptDocument(Path folder, String fileName) throws IOException {
         Path path = folder.resolve(fileName);
@@ -156,10 +220,16 @@ final class DocxFixtures {
     }
 
     private static Path write(Path target, String documentXml, String documentRels) throws IOException {
+        return write(target, documentXml, documentRels, STYLES);
+    }
+
+    private static Path write(Path target, String documentXml, String documentRels, String stylesXml)
+            throws IOException {
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(target))) {
             entry(zip, "[Content_Types].xml", CONTENT_TYPES.getBytes(StandardCharsets.UTF_8));
             entry(zip, "_rels/.rels", ROOT_RELS.getBytes(StandardCharsets.UTF_8));
-            entry(zip, "word/styles.xml", STYLES.getBytes(StandardCharsets.UTF_8));
+            entry(zip, "word/numbering.xml", NUMBERING.getBytes(StandardCharsets.UTF_8));
+            entry(zip, "word/styles.xml", stylesXml.getBytes(StandardCharsets.UTF_8));
             entry(zip, "word/document.xml", documentXml.getBytes(StandardCharsets.UTF_8));
             if (documentRels != null) {
                 entry(zip, "word/_rels/document.xml.rels", documentRels.getBytes(StandardCharsets.UTF_8));
