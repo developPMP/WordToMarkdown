@@ -1,0 +1,123 @@
+package com.wordtomarkdown;
+
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import javax.swing.SwingUtilities;
+import java.awt.GraphicsEnvironment;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+
+/**
+ * Comprobaciones sobre la ventana. Requieren entorno gráfico: si no lo hay
+ * (por ejemplo en un servidor de integración headless) las pruebas se omiten
+ * en lugar de fallar.
+ */
+@DisplayName("Ventana principal")
+class AppUiTest {
+
+    @BeforeAll
+    static void requiereEntornoGrafico() {
+        assumeFalse(GraphicsEnvironment.isHeadless(), "sin entorno gráfico disponible");
+    }
+
+    /** Crea la ventana en el hilo de eventos, como hace la aplicación real. */
+    private App nuevaVentana() throws InterruptedException, InvocationTargetException {
+        AtomicReference<App> ref = new AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> ref.set(new App()));
+        return ref.get();
+    }
+
+    @Test
+    @DisplayName("arranca en modo Archivo y con la conversión deshabilitada")
+    void estadoInicial() throws Exception {
+        App app = nuevaVentana();
+
+        assertFalse(app.isFolderMode(), "el modo por defecto debe ser Archivo");
+        assertEquals("Archivo .docx:", app.pathLabel());
+        assertEquals("", app.selectedPath());
+        assertFalse(app.isConvertEnabled());
+    }
+
+    @Test
+    @DisplayName("el área de registro acepta que se le suelten archivos")
+    void areaDeRegistroPreparadaParaSoltar() throws Exception {
+        App app = nuevaVentana();
+
+        assertNotNull(app.logArea().getTransferHandler(), "falta el TransferHandler propio");
+        assertNotNull(app.logArea().getDropTarget(), "el área no admite drops");
+        assertTrue(app.logArea().getDropTarget().isActive());
+    }
+
+    @Test
+    @DisplayName("soltar un .docx pasa a modo Archivo y rellena la ruta")
+    void soltarDocumento(@TempDir Path folder) throws Exception {
+        App app = nuevaVentana();
+        Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
+
+        // Estando en modo Carpeta, soltar un documento debe devolver a modo Archivo
+        assertTrue(app.applyDroppedPath(folder.toFile()));
+        assertTrue(app.isFolderMode());
+
+        assertTrue(app.applyDroppedPath(docx.toFile()));
+
+        assertFalse(app.isFolderMode());
+        assertEquals("Archivo .docx:", app.pathLabel());
+        assertEquals(docx.toFile().getAbsolutePath(), app.selectedPath());
+        assertTrue(app.isConvertEnabled());
+        assertTrue(app.logArea().getText().contains("Archivo arrastrado: Informe.docx"));
+    }
+
+    @Test
+    @DisplayName("soltar una carpeta pasa a modo Carpeta")
+    void soltarCarpeta(@TempDir Path folder) throws Exception {
+        App app = nuevaVentana();
+        DocxFixtures.simpleDocument(folder, "Alpha.docx", "a");
+
+        assertTrue(app.applyDroppedPath(folder.toFile()));
+
+        assertTrue(app.isFolderMode());
+        assertEquals("Carpeta:", app.pathLabel());
+        assertEquals(folder.toFile().getAbsolutePath(), app.selectedPath());
+        assertTrue(app.isConvertEnabled());
+    }
+
+    @Test
+    @DisplayName("soltar algo que no es .docx no altera la selección anterior")
+    void soltarAlgoInvalido(@TempDir Path folder) throws Exception {
+        App app = nuevaVentana();
+        Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
+        Path texto = Files.writeString(folder.resolve("notas.txt"), "hola", StandardCharsets.UTF_8);
+
+        app.applyDroppedPath(docx.toFile());
+        String rutaPrevia = app.selectedPath();
+
+        assertFalse(app.applyDroppedPath(texto.toFile()));
+
+        assertEquals(rutaPrevia, app.selectedPath(), "la ruta previa debe conservarse");
+        assertTrue(app.isConvertEnabled(), "la selección válida anterior sigue vigente");
+        assertTrue(app.logArea().getText().contains("Ignorado (no es un .docx): notas.txt"));
+    }
+
+    @Test
+    @DisplayName("los fixtures generan documentos que la aplicación sabe convertir")
+    void integracionConElServicio(@TempDir Path folder) throws IOException {
+        Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
+
+        ConversionResult result = new ConversionService().convert(docx.toFile());
+
+        assertTrue(result.success());
+    }
+}

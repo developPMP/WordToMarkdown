@@ -36,10 +36,15 @@ WordToMarkdown/
     ├── main/java/com/wordtomarkdown/
     │   ├── App.java                 Interfaz Swing (ventana, selección, registro)
     │   ├── ConversionService.java   Lógica de conversión, sin dependencias de UI
-    │   └── ConversionResult.java    Resultado de convertir un documento
+    │   ├── ConversionResult.java    Resultado de convertir un documento
+    │   ├── ConversionReporter.java  Traduce el resultado a líneas de registro
+    │   └── SelectionPolicy.java     Decide qué hacer con una ruta arrastrada
     └── test/java/com/wordtomarkdown/
         ├── ConversionServiceTest.java
         ├── FindDocxFilesTest.java
+        ├── ConversionReporterTest.java
+        ├── SelectionPolicyTest.java
+        ├── AppUiTest.java           Ventana (se omite sin entorno gráfico)
         └── DocxFixtures.java        Genera documentos .docx de prueba
 ```
 
@@ -105,9 +110,19 @@ mvn test
 ```
 
 Las pruebas (JUnit 5) cubren la selección de documentos en carpeta, el filtrado de
-temporales de Word, la conversión a Markdown, la extracción de imágenes y el
-comportamiento ante documentos ilegibles. Los `.docx` de prueba se generan al vuelo
-en carpetas temporales (`DocxFixtures`), por lo que no se versiona ningún binario.
+temporales de Word, la conversión a Markdown, la extracción de imágenes, el
+comportamiento ante documentos ilegibles, el criterio al arrastrar y soltar, el
+formato del registro y el estado de la ventana. Los `.docx` de prueba se generan al
+vuelo en carpetas temporales (`DocxFixtures`), por lo que no se versiona ningún
+binario.
+
+Las pruebas de `AppUiTest` necesitan entorno gráfico para crear la ventana. En un
+entorno headless (por ejemplo integración continua) **se omiten** en lugar de
+fallar, y el resto de la batería se ejecuta con normalidad:
+
+```bash
+mvn test -DargLine="-Djava.awt.headless=true"
+```
 
 ## Uso
 

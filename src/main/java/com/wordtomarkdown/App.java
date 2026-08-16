@@ -22,6 +22,8 @@ public class App extends JFrame {
     private boolean converting;
 
     private final ConversionService service = new ConversionService();
+    private final SelectionPolicy selectionPolicy = new SelectionPolicy(service);
+    private final ConversionReporter reporter = new ConversionReporter();
 
     public App() {
         super("Word a Markdown - Conversor");
@@ -152,28 +154,24 @@ public class App extends JFrame {
         }
     }
 
-    /** Aplica la ruta arrastrada ajustando el tipo de selección al contenido soltado. */
-    private boolean applyDroppedPath(File dropped) {
-        if (dropped.isDirectory()) {
-            rbFolder.setSelected(true);
-            updateModeLabel();
-            txtFilePath.setText(dropped.getAbsolutePath());
-            btnConvert.setEnabled(true);
-            log("Carpeta arrastrada: " + dropped.getAbsolutePath());
-            log("Documentos .docx encontrados: " + service.findDocxFiles(dropped).size());
-            return true;
-        }
+    /**
+     * Aplica la ruta arrastrada ajustando el tipo de selección al contenido soltado.
+     * El criterio lo decide {@link SelectionPolicy}; aquí solo se refleja en la ventana.
+     *
+     * <p>Visible para las pruebas.
+     */
+    boolean applyDroppedPath(File dropped) {
+        SelectionPolicy.Decision decision = selectionPolicy.decideDrop(dropped);
+        decision.messages().forEach(this::log);
 
-        if (!service.isDocx(dropped)) {
-            log("Ignorado (no es un .docx): " + dropped.getName());
+        if (!decision.accepted()) {
             return false;
         }
 
-        rbFile.setSelected(true);
+        (decision.folderMode() ? rbFolder : rbFile).setSelected(true);
         updateModeLabel();
-        txtFilePath.setText(dropped.getAbsolutePath());
+        txtFilePath.setText(decision.path().getAbsolutePath());
         btnConvert.setEnabled(true);
-        log("Archivo arrastrado: " + dropped.getName());
         return true;
     }
 
@@ -254,7 +252,7 @@ public class App extends JFrame {
                 int failed = 0;
                 for (File docx : pending) {
                     ConversionResult result = service.convert(docx);
-                    report(result, out);
+                    reporter.describe(result).forEach(out);
                     if (result.success()) {
                         converted++;
                     } else {
@@ -264,8 +262,7 @@ public class App extends JFrame {
                 }
 
                 if (pending.size() > 1) {
-                    out.accept("----------------------------------------");
-                    out.accept("Resumen: " + converted + " convertido(s), " + failed + " con error.");
+                    reporter.summarize(converted, failed).forEach(out);
                 }
                 return null;
             }
@@ -284,33 +281,26 @@ public class App extends JFrame {
         worker.execute();
     }
 
-    /** Vuelca en el registro lo ocurrido con un documento. */
-    private void report(ConversionResult result, Consumer<String> publish) {
-        publish.accept("Convirtiendo: " + result.source().getName());
-        publish.accept("  Salida: " + result.output().getAbsolutePath());
+    // --- Accesores visibles para las pruebas (mismo paquete) ---
 
-        if (!result.success()) {
-            publish.accept("  ERROR: " + result.errorMessage());
-            return;
-        }
+    JTextArea logArea() {
+        return txtLog;
+    }
 
-        if (!result.warnings().isEmpty()) {
-            publish.accept("  Advertencias durante la conversión:");
-            result.warnings().forEach(w -> publish.accept("    [!] " + w));
-        }
-        if (result.imagesExtracted() > 0) {
-            publish.accept("  Imágenes extraídas: " + result.imagesExtracted()
-                + " → " + result.imageDir().getFileName() + "/");
-        }
-        if (result.hasImageErrors()) {
-            publish.accept("  No se pudieron extraer " + result.imageErrors().size() + " imagen(es):");
-            result.imageErrors().forEach(m -> publish.accept("    [!] " + m));
-        }
+    boolean isFolderMode() {
+        return rbFolder.isSelected();
+    }
 
-        publish.accept("  OK: " + result.output().getName()
-            + (result.hasImageErrors()
-                ? " (con " + result.imageErrors().size() + " imagen(es) sin extraer)"
-                : ""));
+    String selectedPath() {
+        return txtFilePath.getText();
+    }
+
+    String pathLabel() {
+        return lblFile.getText();
+    }
+
+    boolean isConvertEnabled() {
+        return btnConvert.isEnabled();
     }
 
     /** Bloquea los controles mientras hay una conversión en curso. */
