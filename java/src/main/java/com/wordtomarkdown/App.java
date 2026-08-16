@@ -20,6 +20,7 @@ public class App extends JFrame {
     private JButton btnSelect;
     private JButton btnConvert;
     private JButton btnCopyLog;
+    private JButton btnClearLog;
     private JTextArea txtLog;
     private JLabel lblFile;
     private JRadioButton rbFile;
@@ -102,8 +103,14 @@ public class App extends JFrame {
         txtLog.setTransferHandler(dropHandler);
         scrollPane.setTransferHandler(dropHandler);
 
-        // Panel inferior: copiar el registro y convertir
+        // Panel inferior: acciones sobre el registro y conversión
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
+        btnClearLog = new JButton("Limpiar");
+        btnClearLog.setEnabled(false);
+        btnClearLog.setToolTipText("Vacía el área de registro");
+        btnClearLog.addActionListener(e -> clearLog());
+        bottomPanel.add(btnClearLog);
 
         btnCopyLog = new JButton("Copiar registro");
         btnCopyLog.setEnabled(false);
@@ -197,11 +204,14 @@ public class App extends JFrame {
      */
     boolean applyDroppedPath(File dropped) {
         SelectionPolicy.Decision decision = selectionPolicy.decideDrop(dropped);
-        decision.messages().forEach(this::log);
-
         if (!decision.accepted()) {
+            // Lo rechazado no es una carga nueva: se avisa sin borrar lo anterior
+            decision.messages().forEach(this::log);
             return false;
         }
+
+        clearLog();
+        decision.messages().forEach(this::log);
 
         (decision.folderMode() ? rbFolder : rbFile).setSelected(true);
         updateModeLabel();
@@ -227,6 +237,7 @@ public class App extends JFrame {
         int result = chooser.showOpenDialog(this);
         if (result == JFileChooser.APPROVE_OPTION) {
             File selected = chooser.getSelectedFile();
+            clearLog();
             txtFilePath.setText(selected.getAbsolutePath());
             btnConvert.setEnabled(true);
             if (folderMode) {
@@ -270,8 +281,7 @@ public class App extends JFrame {
         }
 
         setUiBusy(true);
-        txtLog.setText("");
-        btnCopyLog.setEnabled(false);
+        clearLog();
 
         // Ejecutar conversión en hilo separado para no bloquear la UI
         SwingWorker<Void, String> worker = new SwingWorker<>() {
@@ -343,13 +353,22 @@ public class App extends JFrame {
         return btnCopyLog.isEnabled();
     }
 
-    /** Bloquea los controles mientras hay una conversión en curso. */
+    boolean isClearLogEnabled() {
+        return btnClearLog.isEnabled();
+    }
+
+    /**
+     * Bloquea los controles mientras hay una conversión en curso. Copiar sigue
+     * disponible —el registro se va llenando— pero limpiar no: borraría lo que
+     * se está escribiendo.
+     */
     private void setUiBusy(boolean busy) {
         converting = busy;
         btnConvert.setEnabled(!busy);
         btnSelect.setEnabled(!busy);
         rbFile.setEnabled(!busy);
         rbFolder.setEnabled(!busy);
+        btnClearLog.setEnabled(!busy && !txtLog.getText().isEmpty());
     }
 
     /** Menú del botón derecho sobre el registro. */
@@ -399,6 +418,19 @@ public class App extends JFrame {
         txtLog.append(message + "\n");
         txtLog.setCaretPosition(txtLog.getDocument().getLength());
         btnCopyLog.setEnabled(true);
+        btnClearLog.setEnabled(!converting);
+    }
+
+    /**
+     * Vacía el registro. Se hace también al elegir un archivo o una carpeta y al
+     * empezar una conversión: lo que se ve siempre es lo último que se ha hecho.
+     *
+     * <p>Visible para las pruebas.
+     */
+    void clearLog() {
+        txtLog.setText("");
+        btnCopyLog.setEnabled(false);
+        btnClearLog.setEnabled(false);
     }
 
     private void showError(String message) {

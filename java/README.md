@@ -149,7 +149,7 @@ al contenido soltado —**Archivo** si es un documento, **Carpeta** si es un dir
 y rellenando la ruta. Lo que no sea un `.docx` se ignora sin alterar la selección
 previa, y no se admiten arrastres mientras hay una conversión en curso.
 
-### Copiar el registro
+### Copiar y limpiar el registro
 
 El texto del registro (`Convirtiendo: ...`, avisos, rutas de salida) se puede
 seleccionar y copiar de tres formas:
@@ -158,6 +158,12 @@ seleccionar y copiar de tres formas:
 - **Botón derecho** sobre el registro: *Copiar* (lo seleccionado, o todo si no hay
   selección) y *Seleccionar todo*.
 - **Teclado**: seleccionar con el ratón y `Cmd+C` / `Ctrl+C`.
+
+El botón **"Limpiar"** vacía el registro sin tocar la selección actual. Además se
+limpia solo al **elegir o arrastrar** otro archivo o carpeta y al **empezar** una
+conversión, de forma que lo que se ve siempre corresponde a lo último que se ha
+hecho. Lo que se ignora al arrastrar (algo que no es un `.docx`) no borra nada:
+solo añade el aviso.
 
 ### Modo carpeta
 
@@ -219,7 +225,7 @@ en un visor de Markdown. `MarkdownCleaner` corrige estos:
 
 ## Notas
 
-- La conversión se ejecuta en un hilo secundario (`SwingWorker`) para no bloquear la interfaz; durante el proceso los controles quedan deshabilitados, salvo el de copiar el registro.
+- La conversión se ejecuta en un hilo secundario (`SwingWorker`) para no bloquear la interfaz; durante el proceso los controles quedan deshabilitados, salvo el de copiar el registro (limpiar sí se bloquea: borraría lo que se está escribiendo).
 - El área de registro usa un `TransferHandler` propio para admitir arrastrar y soltar. Como ese mismo objeto es el que copia al portapapeles, implementa las dos cosas: sustituirlo sin más dejaría el registro sin copiar.
 - Cualquier advertencia generada por Mammoth durante la conversión se muestra en el panel de registro de la ventana.
 - Las imágenes del documento se extraen como archivos independientes en una carpeta `{nombre}_images/` junto al `.md`. Las referencias quedan como rutas relativas en el Markdown.

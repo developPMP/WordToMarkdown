@@ -160,6 +160,55 @@ class AppUiTest {
     }
 
     @Test
+    @DisplayName("el botón Limpiar vacía el registro y se deshabilita")
+    void limpiarElRegistro(@TempDir Path folder) throws Exception {
+        App app = nuevaVentana();
+        Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
+        app.applyDroppedPath(docx.toFile());
+
+        assertTrue(app.isClearLogEnabled(), "con registro debe poder limpiarse");
+
+        app.clearLog();
+
+        assertEquals("", app.logArea().getText());
+        assertFalse(app.isClearLogEnabled(), "sin registro no hay nada que limpiar");
+        assertFalse(app.isCopyLogEnabled(), "ni nada que copiar");
+        assertEquals(docx.toFile().getAbsolutePath(), app.selectedPath(),
+            "limpiar el registro no cambia la selección");
+        assertTrue(app.isConvertEnabled());
+    }
+
+    @Test
+    @DisplayName("cargar otro archivo limpia el registro anterior")
+    void cargarOtroArchivoLimpiaElRegistro(@TempDir Path folder) throws Exception {
+        App app = nuevaVentana();
+        Path primero = DocxFixtures.simpleDocument(folder, "Primero.docx", "uno");
+        Path segundo = DocxFixtures.simpleDocument(folder, "Segundo.docx", "dos");
+
+        app.applyDroppedPath(primero.toFile());
+        app.applyDroppedPath(segundo.toFile());
+
+        String registro = app.logArea().getText();
+        assertTrue(registro.contains("Segundo.docx"), registro);
+        assertFalse(registro.contains("Primero.docx"), "el registro anterior debe borrarse: " + registro);
+    }
+
+    @Test
+    @DisplayName("soltar algo inválido no borra el registro que ya había")
+    void soltarAlgoInvalidoNoLimpia(@TempDir Path folder) throws Exception {
+        App app = nuevaVentana();
+        Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
+        Path texto = Files.writeString(folder.resolve("notas.txt"), "hola", StandardCharsets.UTF_8);
+
+        app.applyDroppedPath(docx.toFile());
+        app.applyDroppedPath(texto.toFile());
+
+        String registro = app.logArea().getText();
+        assertTrue(registro.contains("Informe.docx"), registro);
+        assertTrue(registro.contains("Ignorado (no es un .docx): notas.txt"), registro);
+    }
+
+    @Test
     @DisplayName("los fixtures generan documentos que la aplicación sabe convertir")
     void integracionConElServicio(@TempDir Path folder) throws IOException {
         Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
