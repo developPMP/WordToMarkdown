@@ -101,6 +101,49 @@ class ConversionServiceTest {
     }
 
     @Test
+    @DisplayName("las tablas salen con el separador tras la fila de encabezado")
+    void tablasVisibles(@TempDir Path folder) throws IOException {
+        Path docx = DocxFixtures.documentWithIndexAndTable(folder, "Manual.docx");
+
+        ConversionResult result = service.convert(docx.toFile());
+        String markdown = Files.readString(result.output().toPath(), StandardCharsets.UTF_8);
+
+        // Sin este orden el visor no reconoce la tabla y el cuadro no se ve
+        assertTrue(markdown.contains("""
+            | Campo  | Descripcion |
+            |--------|-------------|
+            | Nombre | Texto libre |"""), markdown);
+    }
+
+    @Test
+    @DisplayName("el título del documento se convierte en encabezado y sin subrayados")
+    void tituloComoEncabezado(@TempDir Path folder) throws IOException {
+        Path docx = DocxFixtures.documentWithIndexAndTable(folder, "Manual.docx");
+
+        ConversionResult result = service.convert(docx.toFile());
+        String markdown = Files.readString(result.output().toPath(), StandardCharsets.UTF_8);
+
+        assertTrue(markdown.startsWith("# Manual de Usuario"), markdown);
+        assertTrue(markdown.contains("## 3.3 Interfaz"), markdown);
+        assertFalse(markdown.contains("====="), markdown);
+    }
+
+    @Test
+    @DisplayName("el índice queda como lista navegable, sangrada y sin anclas de Word")
+    void indiceLegible(@TempDir Path folder) throws IOException {
+        Path docx = DocxFixtures.documentWithIndexAndTable(folder, "Manual.docx");
+
+        ConversionResult result = service.convert(docx.toFile());
+        String markdown = Files.readString(result.output().toPath(), StandardCharsets.UTF_8);
+
+        assertFalse(markdown.contains("_Toc"), markdown);
+        assertTrue(markdown.contains("""
+            - [3 Requisitos](#3-requisitos)
+              - [3.3 Interfaz](#33-interfaz)
+                - 3.3.1.1 Pantalla de acceso"""), markdown);
+    }
+
+    @Test
     @DisplayName("un documento ilegible falla sin dejar Markdown a medias")
     void documentoCorrupto(@TempDir Path folder) throws IOException {
         Path docx = DocxFixtures.corruptDocument(folder, "Corrupto.docx");
@@ -110,6 +153,43 @@ class ConversionServiceTest {
         assertFalse(result.success());
         assertNotNull(result.errorMessage());
         assertFalse(result.output().exists(), "no debe quedar un .md incompleto");
+    }
+
+    @Test
+    @DisplayName("una página web guardada como .docx se explica en vez de dar un error técnico")
+    void paginaWebGuardadaComoDocx(@TempDir Path folder) throws IOException {
+        Path fake = folder.resolve("test.docx");
+        Files.writeString(fake, """
+            <!DOCTYPE html>
+            <!-- saved from url=(0476)https://gemini.google.com/app/e8e8dca6 -->
+            <html><head><title>Crear Archivos DOCX en Mac</title></head><body>hola</body></html>
+            """, StandardCharsets.UTF_8);
+
+        ConversionResult result = service.convert(fake.toFile());
+
+        assertFalse(result.success());
+        assertTrue(result.errorMessage().contains("página web (HTML)"), result.errorMessage());
+        assertFalse(result.errorMessage().contains("ZipException"), result.errorMessage());
+        assertFalse(result.output().exists());
+    }
+
+    @Test
+    @DisplayName("reconoce otros formatos con la extensión cambiada")
+    void otrosFormatosConExtensionCambiada(@TempDir Path folder) throws IOException {
+        Files.write(folder.resolve("antiguo.docx"),
+            new byte[] {(byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0, 0x00, 0x00});
+        Files.writeString(folder.resolve("manual.docx"), "%PDF-1.7\n%...", StandardCharsets.UTF_8);
+        Files.writeString(folder.resolve("vacio.docx"), "", StandardCharsets.UTF_8);
+
+        assertTrue(errorFor(folder, "antiguo.docx").contains("anterior a 2007 (.doc)"));
+        assertTrue(errorFor(folder, "manual.docx").contains("PDF"));
+        assertTrue(errorFor(folder, "vacio.docx").contains("vacío"));
+    }
+
+    private String errorFor(Path folder, String fileName) {
+        ConversionResult result = service.convert(folder.resolve(fileName).toFile());
+        assertFalse(result.success(), fileName + " no debería convertirse");
+        return result.errorMessage();
     }
 
     @Test

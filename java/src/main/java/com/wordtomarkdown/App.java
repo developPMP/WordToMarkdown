@@ -3,8 +3,12 @@ package com.wordtomarkdown;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.text.JTextComponent;
 import java.awt.*;
+import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.util.List;
@@ -15,6 +19,7 @@ public class App extends JFrame {
     private JTextField txtFilePath;
     private JButton btnSelect;
     private JButton btnConvert;
+    private JButton btnCopyLog;
     private JTextArea txtLog;
     private JLabel lblFile;
     private JRadioButton rbFile;
@@ -84,6 +89,9 @@ public class App extends JFrame {
         txtLog.setLineWrap(true);
         txtLog.setWrapStyleWord(true);
 
+        // El registro no se edita, pero sí se selecciona y se copia
+        txtLog.setComponentPopupMenu(logPopupMenu());
+
         JScrollPane scrollPane = new JScrollPane(txtLog);
         scrollPane.setBorder(BorderFactory.createTitledBorder(
             "Registro (o arrastre aquí un .docx o una carpeta)"));
@@ -94,8 +102,15 @@ public class App extends JFrame {
         txtLog.setTransferHandler(dropHandler);
         scrollPane.setTransferHandler(dropHandler);
 
-        // Panel inferior: botón de conversión
+        // Panel inferior: copiar el registro y convertir
         JPanel bottomPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+
+        btnCopyLog = new JButton("Copiar registro");
+        btnCopyLog.setEnabled(false);
+        btnCopyLog.setToolTipText("Copia todo el registro al portapapeles");
+        btnCopyLog.addActionListener(e -> copyLog(getToolkit().getSystemClipboard()));
+        bottomPanel.add(btnCopyLog);
+
         btnConvert = new JButton("Convertir a Markdown");
         btnConvert.setEnabled(false);
         btnConvert.setPreferredSize(new Dimension(180, 32));
@@ -121,8 +136,28 @@ public class App extends JFrame {
     /**
      * Acepta archivos y carpetas soltados sobre el área de registro, con el mismo
      * efecto que elegirlos desde el diálogo "Seleccionar...".
+     *
+     * <p>Reemplazar el {@code TransferHandler} de un componente de texto también
+     * sustituye el que copia al portapapeles, así que aquí se implementa la
+     * copia además de la recepción: si no, el registro no se podría copiar.
      */
     private class PathDropHandler extends TransferHandler {
+
+        @Override
+        public int getSourceActions(JComponent component) {
+            return COPY;
+        }
+
+        @Override
+        protected Transferable createTransferable(JComponent component) {
+            if (component instanceof JTextComponent text) {
+                String selected = text.getSelectedText();
+                if (selected != null && !selected.isEmpty()) {
+                    return new StringSelection(selected);
+                }
+            }
+            return null;
+        }
 
         @Override
         public boolean canImport(TransferSupport support) {
@@ -236,6 +271,7 @@ public class App extends JFrame {
 
         setUiBusy(true);
         txtLog.setText("");
+        btnCopyLog.setEnabled(false);
 
         // Ejecutar conversión en hilo separado para no bloquear la UI
         SwingWorker<Void, String> worker = new SwingWorker<>() {
@@ -303,6 +339,10 @@ public class App extends JFrame {
         return btnConvert.isEnabled();
     }
 
+    boolean isCopyLogEnabled() {
+        return btnCopyLog.isEnabled();
+    }
+
     /** Bloquea los controles mientras hay una conversión en curso. */
     private void setUiBusy(boolean busy) {
         converting = busy;
@@ -312,9 +352,53 @@ public class App extends JFrame {
         rbFolder.setEnabled(!busy);
     }
 
+    /** Menú del botón derecho sobre el registro. */
+    private JPopupMenu logPopupMenu() {
+        JPopupMenu menu = new JPopupMenu();
+
+        JMenuItem copy = new JMenuItem("Copiar");
+        copy.addActionListener(e -> copySelectionOrAll());
+        menu.add(copy);
+
+        JMenuItem selectAll = new JMenuItem("Seleccionar todo");
+        selectAll.addActionListener(e -> {
+            txtLog.requestFocusInWindow();
+            txtLog.selectAll();
+        });
+        menu.add(selectAll);
+
+        return menu;
+    }
+
+    /** Copia lo seleccionado o, si no hay selección, el registro entero. */
+    private void copySelectionOrAll() {
+        if (txtLog.getSelectedText() != null) {
+            txtLog.copy();
+        } else {
+            copyLog(getToolkit().getSystemClipboard());
+        }
+    }
+
+    /**
+     * Copia el registro completo al portapapeles indicado. Devuelve false si no
+     * hay nada que copiar.
+     *
+     * <p>Recibe el portapapeles como parámetro para poder probarlo sin tocar el
+     * del sistema. Visible para las pruebas.
+     */
+    boolean copyLog(Clipboard clipboard) {
+        String text = txtLog.getText();
+        if (text.isEmpty()) {
+            return false;
+        }
+        clipboard.setContents(new StringSelection(text), null);
+        return true;
+    }
+
     private void log(String message) {
         txtLog.append(message + "\n");
         txtLog.setCaretPosition(txtLog.getDocument().getLength());
+        btnCopyLog.setEnabled(true);
     }
 
     private void showError(String message) {

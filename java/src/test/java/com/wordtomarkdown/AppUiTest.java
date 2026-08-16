@@ -5,8 +5,12 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import javax.swing.JTextArea;
 import javax.swing.SwingUtilities;
+import javax.swing.TransferHandler;
 import java.awt.GraphicsEnvironment;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.DataFlavor;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
@@ -109,6 +113,50 @@ class AppUiTest {
         assertEquals(rutaPrevia, app.selectedPath(), "la ruta previa debe conservarse");
         assertTrue(app.isConvertEnabled(), "la selección válida anterior sigue vigente");
         assertTrue(app.logArea().getText().contains("Ignorado (no es un .docx): notas.txt"));
+    }
+
+    @Test
+    @DisplayName("el registro se puede seleccionar y copiar al portapapeles")
+    void registroCopiable(@TempDir Path folder) throws Exception {
+        App app = nuevaVentana();
+        Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
+        app.applyDroppedPath(docx.toFile());
+
+        // Portapapeles propio: las pruebas no deben pisar el del usuario
+        Clipboard clipboard = new Clipboard("pruebas");
+
+        assertTrue(app.copyLog(clipboard), "el registro tiene contenido que copiar");
+        assertEquals(app.logArea().getText(),
+            clipboard.getData(DataFlavor.stringFlavor), "debe copiarse el registro entero");
+    }
+
+    @Test
+    @DisplayName("el TransferHandler del registro admite copiar la selección")
+    void copiarSeleccion() throws Exception {
+        App app = nuevaVentana();
+        JTextArea log = app.logArea();
+        SwingUtilities.invokeAndWait(() -> {
+            log.setText("Convirtiendo: Informe.docx\nMarkdown generado: Informe.md\n");
+            log.select(0, "Convirtiendo: Informe.docx".length());
+        });
+
+        Clipboard clipboard = new Clipboard("pruebas");
+        log.getTransferHandler().exportToClipboard(log, clipboard, TransferHandler.COPY);
+
+        assertEquals("Convirtiendo: Informe.docx", clipboard.getData(DataFlavor.stringFlavor));
+    }
+
+    @Test
+    @DisplayName("el registro ofrece menú contextual y botón de copia")
+    void controlesDeCopia() throws Exception {
+        App app = nuevaVentana();
+
+        assertNotNull(app.logArea().getComponentPopupMenu(), "falta el menú del botón derecho");
+        assertFalse(app.isCopyLogEnabled(), "sin registro no hay nada que copiar");
+
+        app.applyDroppedPath(new java.io.File("inexistente.txt"));
+
+        assertTrue(app.isCopyLogEnabled(), "con registro el botón debe habilitarse");
     }
 
     @Test

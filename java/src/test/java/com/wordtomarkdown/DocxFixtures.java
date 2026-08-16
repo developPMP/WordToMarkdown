@@ -26,7 +26,23 @@ final class DocxFixtures {
         <Default Extension="xml" ContentType="application/xml"/>
         <Default Extension="png" ContentType="image/png"/>
         <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+        <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
         </Types>""";
+
+    /**
+     * Estilos con el nombre canónico que guarda el .docx (en inglés aunque Word
+     * esté en español) y el identificador que genera la versión española.
+     */
+    private static final String STYLES = """
+        <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+        <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:style w:type="paragraph" w:styleId="Ttulo"><w:name w:val="Title"/></w:style>
+        <w:style w:type="paragraph" w:styleId="Ttulo1"><w:name w:val="heading 1"/></w:style>
+        <w:style w:type="paragraph" w:styleId="Ttulo2"><w:name w:val="heading 2"/></w:style>
+        <w:style w:type="paragraph" w:styleId="TDC1"><w:name w:val="toc 1"/></w:style>
+        <w:style w:type="paragraph" w:styleId="TDC2"><w:name w:val="toc 2"/></w:style>
+        <w:style w:type="paragraph" w:styleId="TDC3"><w:name w:val="toc 3"/></w:style>
+        </w:styles>""";
 
     private static final String ROOT_RELS = """
         <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -69,6 +85,43 @@ final class DocxFixtures {
         return write(folder.resolve(fileName), document(body), documentRels);
     }
 
+    /**
+     * Documento como los que genera Word en la práctica: título propio, índice
+     * con enlaces a marcadores internos, encabezados numerados y una tabla que
+     * no marca fila de encabezado (el caso que rompe la tabla en Markdown).
+     */
+    static Path documentWithIndexAndTable(Path folder, String fileName) throws IOException {
+        String body = """
+            <w:p><w:pPr><w:pStyle w:val="Ttulo"/></w:pPr><w:r><w:t>Manual de Usuario</w:t></w:r></w:p>
+            %s
+            %s
+            %s
+            <w:p><w:pPr><w:pStyle w:val="Ttulo1"/></w:pPr>
+              <w:bookmarkStart w:id="1" w:name="_Toc10"/><w:r><w:t>3 Requisitos</w:t></w:r><w:bookmarkEnd w:id="1"/></w:p>
+            <w:p><w:pPr><w:pStyle w:val="Ttulo2"/></w:pPr>
+              <w:bookmarkStart w:id="2" w:name="_Toc11"/><w:r><w:t>3.3 Interfaz</w:t></w:r><w:bookmarkEnd w:id="2"/></w:p>
+            <w:tbl>
+            <w:tr><w:tc><w:p><w:r><w:t>Campo</w:t></w:r></w:p></w:tc>
+            <w:tc><w:p><w:r><w:t>Descripcion</w:t></w:r></w:p></w:tc></w:tr>
+            <w:tr><w:tc><w:p><w:r><w:t>Nombre</w:t></w:r></w:p></w:tc>
+            <w:tc><w:p><w:r><w:t>Texto libre</w:t></w:r></w:p></w:tc></w:tr>
+            </w:tbl>
+            """.formatted(
+            indexEntry(1, "_Toc10", "3 Requisitos", 8),
+            indexEntry(2, "_Toc11", "3.3 Interfaz", 9),
+            indexEntry(3, "_Toc12", "3.3.1.1 Pantalla de acceso", 10));
+
+        return write(folder.resolve(fileName), document(body), null);
+    }
+
+    /** Entrada de índice: hipervínculo al marcador y número de página tras un tabulador. */
+    private static String indexEntry(int level, String bookmark, String text, int page) {
+        return """
+            <w:p><w:pPr><w:pStyle w:val="TDC%d"/></w:pPr>
+            <w:hyperlink w:anchor="%s"><w:r><w:t>%s</w:t></w:r></w:hyperlink>
+            <w:r><w:tab/><w:t>%d</w:t></w:r></w:p>""".formatted(level, bookmark, text, page);
+    }
+
     /** Archivo con extensión .docx pero contenido que no es un paquete OOXML. */
     static Path corruptDocument(Path folder, String fileName) throws IOException {
         Path path = folder.resolve(fileName);
@@ -106,6 +159,7 @@ final class DocxFixtures {
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(target))) {
             entry(zip, "[Content_Types].xml", CONTENT_TYPES.getBytes(StandardCharsets.UTF_8));
             entry(zip, "_rels/.rels", ROOT_RELS.getBytes(StandardCharsets.UTF_8));
+            entry(zip, "word/styles.xml", STYLES.getBytes(StandardCharsets.UTF_8));
             entry(zip, "word/document.xml", documentXml.getBytes(StandardCharsets.UTF_8));
             if (documentRels != null) {
                 entry(zip, "word/_rels/document.xml.rels", documentRels.getBytes(StandardCharsets.UTF_8));
