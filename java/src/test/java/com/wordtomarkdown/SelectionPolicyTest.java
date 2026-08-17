@@ -17,14 +17,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @DisplayName("Criterio al arrastrar y soltar una ruta")
 class SelectionPolicyTest {
 
-    private final SelectionPolicy policy = new SelectionPolicy(new ConversionService());
+    private final SelectionPolicy policy = new SelectionPolicy();
+    private final ConversionService aWord = new ConversionService();
 
     @Test
     @DisplayName("un .docx se acepta en modo Archivo")
     void aceptaDocumento(@TempDir Path folder) throws IOException {
         Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
 
-        SelectionPolicy.Decision decision = policy.decideDrop(docx.toFile());
+        SelectionPolicy.Decision decision = policy.decideDrop(docx.toFile(), aWord);
 
         assertTrue(decision.accepted());
         assertFalse(decision.folderMode(), "un documento no debe activar el modo carpeta");
@@ -39,7 +40,7 @@ class SelectionPolicyTest {
         DocxFixtures.simpleDocument(folder, "Beta.docx", "b");
         Files.writeString(folder.resolve("~$Alpha.docx"), "lock", StandardCharsets.UTF_8);
 
-        SelectionPolicy.Decision decision = policy.decideDrop(folder.toFile());
+        SelectionPolicy.Decision decision = policy.decideDrop(folder.toFile(), aWord);
 
         assertTrue(decision.accepted());
         assertTrue(decision.folderMode());
@@ -54,7 +55,7 @@ class SelectionPolicyTest {
     void rechazaOtrasExtensiones(@TempDir Path folder) throws IOException {
         Path texto = Files.writeString(folder.resolve("notas.txt"), "hola", StandardCharsets.UTF_8);
 
-        SelectionPolicy.Decision decision = policy.decideDrop(texto.toFile());
+        SelectionPolicy.Decision decision = policy.decideDrop(texto.toFile(), aWord);
 
         assertFalse(decision.accepted());
         assertNull(decision.path());
@@ -66,15 +67,32 @@ class SelectionPolicyTest {
     void rechazaTemporalDeWord(@TempDir Path folder) throws IOException {
         Path temporal = Files.writeString(folder.resolve("~$Informe.docx"), "lock", StandardCharsets.UTF_8);
 
-        SelectionPolicy.Decision decision = policy.decideDrop(temporal.toFile());
+        SelectionPolicy.Decision decision = policy.decideDrop(temporal.toFile(), aWord);
 
         assertFalse(decision.accepted());
     }
 
     @Test
+    @DisplayName("qué se acepta depende del sentido: al revés, manda el .md")
+    void elSentidoDecideQueSeAcepta(@TempDir Path folder) throws IOException {
+        MarkdownToWordService aWord2 = new MarkdownToWordService();
+        Path md = Files.writeString(folder.resolve("Informe.md"), "# Hola", StandardCharsets.UTF_8);
+        Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
+
+        assertTrue(policy.decideDrop(md.toFile(), aWord2).accepted());
+        assertFalse(policy.decideDrop(docx.toFile(), aWord2).accepted());
+        assertFalse(policy.decideDrop(md.toFile(), aWord).accepted());
+
+        assertEquals(java.util.List.of("Ignorado (no es un .md): Informe.docx"),
+            policy.decideDrop(docx.toFile(), aWord2).messages());
+        assertTrue(policy.decideDrop(folder.toFile(), aWord2).messages()
+            .contains("Archivos .md encontrados: 1"));
+    }
+
+    @Test
     @DisplayName("una ruta inexistente o nula se rechaza sin fallar")
     void rechazaRutasInvalidas(@TempDir Path folder) {
-        assertFalse(policy.decideDrop(folder.resolve("no-existe.docx").toFile()).accepted());
-        assertFalse(policy.decideDrop(null).accepted());
+        assertFalse(policy.decideDrop(folder.resolve("no-existe.docx").toFile(), aWord).accepted());
+        assertFalse(policy.decideDrop(null, aWord).accepted());
     }
 }

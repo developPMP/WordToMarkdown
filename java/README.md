@@ -1,12 +1,17 @@
 # Word to Markdown
 
-Aplicación de escritorio en **Java 21** con interfaz **Swing** que convierte documentos Word (`.docx`) a formato **Markdown** (`.md`).
+Aplicación de escritorio en **Java 21** con interfaz **Swing** que convierte
+documentos Word (`.docx`) a **Markdown** (`.md`) **y al revés**.
 
 ## Descripción
 
-El usuario elige, mediante un diálogo, un archivo `.docx` individual o una carpeta completa. La aplicación genera un archivo `.md` con el mismo nombre en la misma carpeta de cada documento de origen.
+El usuario elige el **sentido** de la conversión y, mediante un diálogo, un
+archivo individual o una carpeta completa. La aplicación genera el archivo
+convertido con el mismo nombre, en la misma carpeta del original.
 
 ### Flujo de conversión
+
+**De Word a Markdown**
 
 ```
 documento.docx  →  [Mammoth]  →  HTML  →  [flexmark]  →  documento.md
@@ -19,6 +24,21 @@ documento.docx  →  [Mammoth]  →  HTML  →  [flexmark]  →  documento.md
 
 > La librería Java de Mammoth no incluye conversión directa a Markdown (es una _missing feature_ documentada), por eso se realiza en dos pasos.
 
+**De Markdown a Word**
+
+```
+documento.md  →  [flexmark]  →  árbol  →  [Apache POI]  →  documento.docx
+```
+
+1. **flexmark** analiza el Markdown y devuelve su árbol de elementos.
+2. **`WordWriter`** lo recorre y escribe el documento elemento a elemento con
+   **Apache POI**, apoyándose en **`WordStyles`** para los estilos y las listas.
+
+> Aquí no se pasa por HTML a propósito: escribir el documento a mano cuesta más
+> código, pero es lo que permite generar estilos de Word de verdad (`Heading 1`,
+> listas numeradas, tablas, marcadores) en lugar de un documento con el formato
+> imitado a base de negritas y tamaños. Ver [De Markdown a Word](#de-markdown-a-word).
+
 ## Tecnologías
 
 | Librería | Versión | Rol |
@@ -27,6 +47,8 @@ documento.docx  →  [Mammoth]  →  HTML  →  [flexmark]  →  documento.md
 | Swing | JDK | Interfaz gráfica |
 | [Mammoth](https://github.com/mwilliamson/java-mammoth) | 1.12.0 | Conversión `.docx` → HTML |
 | [flexmark-html2md-converter](https://github.com/vsch/flexmark-java) | 0.64.8 | Conversión HTML → Markdown |
+| [flexmark](https://github.com/vsch/flexmark-java) | 0.64.8 | Análisis del Markdown (sentido inverso) |
+| [Apache POI](https://poi.apache.org/) (`poi-ooxml`) | 5.4.1 | Escritura del `.docx` (sentido inverso) |
 | Maven | 3.x | Gestión de dependencias y build |
 
 ## Estructura del proyecto
@@ -37,14 +59,21 @@ WordToMarkdown/
 └── src/
     ├── main/java/com/wordtomarkdown/
     │   ├── App.java                 Interfaz Swing (ventana, selección, registro)
-    │   ├── ConversionService.java   Lógica de conversión, sin dependencias de UI
+    │   ├── Converter.java           Contrato común a los dos sentidos
+    │   ├── ConversionDirection.java Qué cambia entre un sentido y el otro
+    │   ├── ConversionService.java   Word → Markdown, sin dependencias de UI
+    │   ├── MarkdownToWordService.java  Markdown → Word, sin dependencias de UI
+    │   ├── WordWriter.java          Vuelca el árbol del Markdown en un .docx
+    │   ├── WordStyles.java          Estilos y listas del documento generado
     │   ├── ConversionResult.java    Resultado de convertir un documento
     │   ├── ConversionReporter.java  Traduce el resultado a líneas de registro
     │   ├── MarkdownCleaner.java     Ajusta el Markdown generado (tablas, índice...)
     │   ├── WordNumbering.java       Reconstruye la numeración automática (1, 1.1, 1.1.1)
+    │   ├── Slug.java                Identificador de un encabezado, igual en ambos sentidos
     │   └── SelectionPolicy.java     Decide qué hacer con una ruta arrastrada
     └── test/java/com/wordtomarkdown/
         ├── ConversionServiceTest.java
+        ├── MarkdownToWordServiceTest.java
         ├── MarkdownCleanerTest.java
         ├── WordNumberingTest.java
         ├── FindDocxFilesTest.java
@@ -54,9 +83,12 @@ WordToMarkdown/
         └── DocxFixtures.java        Genera documentos .docx de prueba
 ```
 
-La lógica de conversión vive en `ConversionService`, separada de la ventana: no
-depende de Swing, devuelve el resultado como datos (`ConversionResult`) y es `App`
-quien decide cómo mostrarlo. Así puede probarse sin abrir la interfaz.
+La lógica de conversión vive en los servicios, separada de la ventana: no depende
+de Swing, devuelve el resultado como datos (`ConversionResult`) y es `App` quien
+decide cómo mostrarlo. Así puede probarse sin abrir la interfaz. Los dos sentidos
+implementan la misma interfaz `Converter`, de modo que la ventana trabaja siempre
+contra ella y cambiar de sentido es cambiar de implementación, sin condicionales
+repartidos por la interfaz gráfica.
 
 ## Requisitos previos
 
@@ -119,9 +151,15 @@ Las pruebas (JUnit 5) cubren la selección de documentos en carpeta, el filtrado
 temporales de Word, la conversión a Markdown, los ajustes sobre el Markdown
 generado (tablas, índice, anclas y espaciado), la extracción de imágenes, el
 comportamiento ante documentos ilegibles, el criterio al arrastrar y soltar, el
-formato del registro y el estado de la ventana. Los `.docx` de prueba se generan al
-vuelo en carpetas temporales (`DocxFixtures`), por lo que no se versiona ningún
-binario.
+formato del registro y el estado de la ventana.
+
+Del sentido inverso se comprueba, releyendo con POI el `.docx` generado, que los
+encabezados llevan su estilo de Word, que las listas usan la numeración nativa y
+respetan el anidamiento, que las tablas son tablas, que las imágenes quedan
+incrustadas, que los enlaces internos apuntan a marcadores y que no se sobrescribe
+un documento existente; también la ida y vuelta completa (`.docx` → `.md` →
+`.docx`). Los `.docx` de prueba se generan al vuelo en carpetas temporales
+(`DocxFixtures`), por lo que no se versiona ningún binario.
 
 Las pruebas de `AppUiTest` necesitan entorno gráfico para crear la ventana. En un
 entorno headless (por ejemplo integración continua) **se omiten** en lugar de
@@ -134,20 +172,29 @@ mvn test -DargLine="-Djava.awt.headless=true"
 ## Uso
 
 1. Ejecutar la aplicación con el comando anterior.
-2. Elegir el **tipo de selección** con los botones de opción superiores:
+2. Elegir el **sentido** de la conversión:
+   - **Word → Markdown** (valor por defecto).
+   - **Markdown → Word**.
+3. Elegir el **tipo de selección**:
    - **Archivo** (valor por defecto): convierte un único documento.
-   - **Carpeta**: convierte por lote todos los `.docx` de la carpeta elegida.
-3. Hacer clic en **Seleccionar...** y elegir el archivo o la carpeta.
-4. Hacer clic en **Convertir a Markdown**.
-5. Cada archivo `.md` se genera automáticamente junto a su `.docx` de origen.
+   - **Carpeta**: convierte por lote todos los archivos convertibles de la carpeta
+     elegida (`.docx`, o `.md` y `.markdown` en sentido inverso).
+4. Hacer clic en **Seleccionar...** y elegir el archivo o la carpeta.
+5. Hacer clic en **Convertir a Markdown** / **Convertir a Word**.
+6. Cada archivo se genera automáticamente junto a su original.
+
+Al cambiar de sentido se vacía la selección: un `.docx` no sirve como entrada para
+convertir *a* Word, así que la ruta anterior deja de ser válida.
 
 ### Arrastrar y soltar
 
-Como alternativa al diálogo, se puede arrastrar un `.docx` (o una carpeta) sobre el
+Como alternativa al diálogo, se puede arrastrar un archivo (o una carpeta) sobre el
 área de **Registro**: equivale a seleccionarlo, ajustando además el tipo de selección
 al contenido soltado —**Archivo** si es un documento, **Carpeta** si es un directorio—
-y rellenando la ruta. Lo que no sea un `.docx` se ignora sin alterar la selección
-previa, y no se admiten arrastres mientras hay una conversión en curso.
+y rellenando la ruta. Lo que no valga para el sentido activo se ignora sin alterar la
+selección previa —y el registro dice qué se esperaba (`Ignorado (no es un .md)`)—, y
+no se admiten arrastres mientras hay una conversión en curso. El sentido no se cambia
+solo: lo elige quien usa el programa.
 
 ### Copiar y limpiar el registro
 
@@ -171,8 +218,8 @@ solo añade el aviso.
 
 ### Modo carpeta
 
-- Se procesan los `.docx` **directamente contenidos** en la carpeta; las subcarpetas no se recorren.
-- Se ignoran los archivos temporales que Word crea al tener un documento abierto (`~$nombre.docx`), que no son documentos válidos.
+- Se procesan los archivos **directamente contenidos** en la carpeta; las subcarpetas no se recorren.
+- Se ignoran los archivos temporales que Word crea al tener un documento abierto (`~$nombre.docx`), que no son documentos válidos, y los ocultos.
 - Si un documento falla, el lote continúa con los siguientes y al final se muestra un resumen con el total de conversiones correctas y con error.
 
 ### Archivos que no son .docx de verdad
@@ -189,6 +236,12 @@ con la extensión .docx. Ábrelo en Word y usa Guardar como > Documento de Word 
 
 Pasa a menudo al guardar una conversación de ChatGPT o Gemini como `.docx` desde
 el navegador: lo que se guarda es la página, no un documento.
+
+En el sentido inverso se comprueba lo mismo antes de leer nada: un binario con la
+extensión cambiada a `.md` se podría interpretar como texto en cualquier
+codificación y saldría un documento lleno de basura, así que en su lugar se avisa
+(`No es un archivo de texto Markdown: es un archivo comprimido, probablemente un
+.docx con la extensión cambiada`).
 
 ## Ajustes del Markdown
 
@@ -227,6 +280,60 @@ en un visor de Markdown. `MarkdownCleaner` corrige estos:
   Los saltos de línea forzados y el contenido de los bloques de código se
   respetan.
 
+## De Markdown a Word
+
+El sentido inverso no se limita a volcar el texto: cada elemento del Markdown se
+traduce a su equivalente **nativo** de Word, de modo que el documento se pueda
+seguir editando con normalidad.
+
+- **Encabezados.** Llevan el estilo `Heading 1…6` (el que Word muestra como
+  *Título 1…6* en español) y su **nivel de esquema**. Es lo que hace que aparezcan
+  en el panel de navegación y que se pueda insertar un índice automático con
+  *Referencias > Tabla de contenido*.
+- **Estilos del documento.** Un `.docx` creado desde cero no trae ninguno, así que
+  se generan: `Normal`, los seis encabezados, `Quote` para las citas y estilos
+  propios para el código (bloque y en línea). Al estar aplicados **por nombre**,
+  cambiar el aspecto de todo el documento es cambiar el estilo, no repasarlo
+  párrafo a párrafo.
+- **Listas.** Usan la numeración de Word (`numbering.xml`), con viñetas y niveles
+  de anidamiento reales. Cada lista ordenada estrena numeración: compartiéndola,
+  la segunda lista del documento seguiría contando donde lo dejó la primera.
+- **Tablas.** Se convierten en tablas de Word, con la primera fila sombreada como
+  encabezado y la alineación de cada columna.
+- **Enlaces.** Los externos quedan como hipervínculos. Los internos (los del
+  índice, `[Apartado](#apartado)`) se convierten en **marcadores** y referencias a
+  ellos, así que el índice sigue siendo navegable dentro de Word. Si un enlace
+  apunta a un encabezado que no existe se conserva el texto y se descarta el
+  enlace, igual que en el otro sentido.
+- **Imágenes.** Se **incrustan** en el documento (no se enlazan): el `.docx`
+  resultante es un único archivo y no depende de que la carpeta `{nombre}_images/`
+  siga estando ahí. Se ajustan al ancho de la página conservando su proporción y
+  el texto alternativo se guarda como descripción de la imagen.
+- **Página.** A4 con márgenes de 2,5 cm.
+
+### El documento original no se sobrescribe
+
+Lo normal es que el `.md` venga de un `.docx` que está **en esa misma carpeta y
+con el mismo nombre** —así lo deja la conversión de ida—, de modo que escribir sin
+mirar destruiría el documento original. Cuando el nombre ya está ocupado, el nuevo
+se numera (`Informe (2).docx`); el registro indica siempre cuál se ha escrito.
+
+### Qué no puede recuperarse
+
+El Markdown no guarda parte de lo que sí guarda Word, así que la ida y vuelta no
+devuelve el documento de partida:
+
+- Encabezados y pies de página, saltos de sección, portadas y numeración de páginas.
+- La **numeración automática** de los apartados: al ir a Markdown se escribe dentro
+  del texto del encabezado (`## 3.1 Alcance`), y al volver se queda ahí, como texto,
+  en lugar de reconstruirse como lista multinivel enlazada a los estilos de título.
+- El índice vuelve como la lista de enlaces que es en el Markdown, no como un campo
+  `TOC` que Word actualice solo. Con los encabezados bien estilados, insertar uno
+  automático es cuestión de un clic.
+- Tipografías, colores y tamaños del documento original: el generado sale con el
+  formato base descrito arriba.
+- El HTML incrustado en el Markdown se descarta, avisando en el registro.
+
 ## Notas
 
 - La conversión se ejecuta en un hilo secundario (`SwingWorker`) para no bloquear la interfaz; durante el proceso los controles quedan deshabilitados, salvo el de copiar el registro (limpiar sí se bloquea: borraría lo que se está escribiendo).
@@ -235,3 +342,6 @@ en un visor de Markdown. `MarkdownCleaner` corrige estos:
 - Las imágenes del documento se extraen como archivos independientes en una carpeta `{nombre}_images/` junto al `.md`. Las referencias quedan como rutas relativas en el Markdown.
 - Si una imagen concreta no se puede extraer, la conversión del documento continúa, pero el fallo **no pasa inadvertido**: se detalla en el registro (con número de imagen y causa), se resume en la línea de resultado del documento y en el Markdown queda marcada como `imagen N (no se pudo extraer)`.
 - El texto alternativo (alt text) generado automáticamente por la IA de Microsoft Word (e.g. *"el contenido generado por IA puede ser incorrecto"*) es ignorado; en su lugar se usa un texto genérico (`imagen N`).
+- En el sentido inverso, una imagen que no se encuentre (o que apunte a una dirección de internet, que no se descarga) tampoco aborta el documento: queda anotada en el registro y en su sitio aparece `[imagen no insertada: ...]`.
+- Se espera que el `.md` esté en UTF-8, que es lo que escribe la conversión de ida. Si no lo está —un archivo editado con el Bloc de notas de Windows— se lee con la codificación del sistema y se avisa, en lugar de fallar.
+- Apache POI registra sus mensajes con log4j. Como no se incluye ninguna implementación de registro, la aplicación selecciona la mínima que trae la propia API para que no aparezca un error por consola al arrancar.

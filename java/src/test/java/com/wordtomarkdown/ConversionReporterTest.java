@@ -21,7 +21,8 @@ class ConversionReporterTest {
     private static final Path IMAGENES = Path.of("/docs/Informe_images");
 
     private ConversionResult exito(int imagenes, List<String> erroresImagen, List<String> avisos) {
-        return new ConversionResult(ORIGEN, SALIDA, true, null, avisos, imagenes, erroresImagen, IMAGENES);
+        return new ConversionResult(ConversionDirection.WORD_TO_MARKDOWN, ORIGEN, SALIDA, true, null,
+            avisos, imagenes, erroresImagen, IMAGENES);
     }
 
     @Test
@@ -67,12 +68,29 @@ class ConversionReporterTest {
     @Test
     @DisplayName("un documento fallido muestra el error y ningún OK")
     void documentoFallido() {
-        ConversionResult fallo = ConversionResult.failure(ORIGEN, SALIDA, IMAGENES, "ZipException - roto");
+        ConversionResult fallo = ConversionResult.failure(ConversionDirection.WORD_TO_MARKDOWN, ORIGEN, SALIDA, IMAGENES,
+            "ZipException - roto");
 
         List<String> lineas = reporter.describe(fallo);
 
         assertTrue(lineas.contains("  ERROR: ZipException - roto"), lineas.toString());
         assertFalse(lineas.stream().anyMatch(l -> l.startsWith("  OK:")), lineas.toString());
+    }
+
+    @Test
+    @DisplayName("en sentido inverso las imágenes se insertan, no se extraen")
+    void redaccionDelSentidoInverso() {
+        ConversionResult result = new ConversionResult(
+            ConversionDirection.MARKDOWN_TO_WORD,
+            new File("/docs/Informe.md"), new File("/docs/Informe.docx"), true, null,
+            List.of(), 2, List.of("imagen 3 (falta.png): no se encontró el archivo"), null);
+
+        List<String> lineas = reporter.describe(result);
+
+        // Sin carpeta de imágenes: van dentro del propio documento
+        assertTrue(lineas.contains("  Imágenes insertadas: 2"), lineas.toString());
+        assertTrue(lineas.contains("  No se pudieron insertar 1 imagen(es):"), lineas.toString());
+        assertTrue(lineas.contains("  OK: Informe.docx (con 1 imagen(es) sin insertar)"), lineas.toString());
     }
 
     @Test

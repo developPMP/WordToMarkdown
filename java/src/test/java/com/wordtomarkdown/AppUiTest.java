@@ -56,6 +56,46 @@ class AppUiTest {
     }
 
     @Test
+    @DisplayName("arranca convirtiendo de Word a Markdown")
+    void sentidoPorDefecto() throws Exception {
+        App app = nuevaVentana();
+
+        assertEquals(ConversionDirection.WORD_TO_MARKDOWN, app.direction());
+        assertEquals("Convertir a Markdown", app.convertLabel());
+    }
+
+    @Test
+    @DisplayName("al cambiar de sentido se ajustan las etiquetas y se suelta la selección")
+    void cambioDeSentido(@TempDir Path folder) throws Exception {
+        App app = nuevaVentana();
+        Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
+        app.applyDroppedPath(docx.toFile());
+
+        app.selectDirection(ConversionDirection.MARKDOWN_TO_WORD);
+
+        assertEquals("Archivo .md:", app.pathLabel());
+        assertEquals("Convertir a Word", app.convertLabel());
+        assertEquals("", app.selectedPath(), "el .docx elegido ya no sirve en este sentido");
+        assertFalse(app.isConvertEnabled());
+    }
+
+    @Test
+    @DisplayName("en sentido Markdown a Word se acepta el .md y se rechaza el .docx")
+    void soltarEnSentidoInverso(@TempDir Path folder) throws Exception {
+        App app = nuevaVentana();
+        app.selectDirection(ConversionDirection.MARKDOWN_TO_WORD);
+        Path md = Files.writeString(folder.resolve("Informe.md"), "# Hola", StandardCharsets.UTF_8);
+        Path docx = DocxFixtures.simpleDocument(folder, "Informe.docx", "contenido");
+
+        assertTrue(app.applyDroppedPath(md.toFile()));
+        assertEquals(md.toFile().getAbsolutePath(), app.selectedPath());
+
+        assertFalse(app.applyDroppedPath(docx.toFile()));
+        assertTrue(app.logArea().getText().contains("Ignorado (no es un .md): Informe.docx"),
+            app.logArea().getText());
+    }
+
+    @Test
     @DisplayName("el área de registro acepta que se le suelten archivos")
     void areaDeRegistroPreparadaParaSoltar() throws Exception {
         App app = nuevaVentana();

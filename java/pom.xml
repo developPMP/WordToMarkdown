@@ -27,6 +27,28 @@
             <artifactId>flexmark-html2md-converter</artifactId>
             <version>0.64.8</version>
         </dependency>
+        <!-- Sentido inverso (.md → .docx): flexmark analiza el Markdown y
+             Apache POI escribe el documento Word -->
+        <dependency>
+            <groupId>com.vladsch.flexmark</groupId>
+            <artifactId>flexmark</artifactId>
+            <version>0.64.8</version>
+        </dependency>
+        <dependency>
+            <groupId>com.vladsch.flexmark</groupId>
+            <artifactId>flexmark-ext-tables</artifactId>
+            <version>0.64.8</version>
+        </dependency>
+        <dependency>
+            <groupId>com.vladsch.flexmark</groupId>
+            <artifactId>flexmark-ext-gfm-strikethrough</artifactId>
+            <version>0.64.8</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.4.1</version>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
@@ -69,6 +91,13 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- Igual que en App.main: evita el error de log4j que POI
+                             provoca al no encontrar una implementación de registro -->
+                        <log4j2.loggerContextFactory>org.apache.logging.log4j.simple.SimpleLoggerContextFactory</log4j2.loggerContextFactory>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -99,7 +128,25 @@
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                                     <mainClass>com.wordtomarkdown.App</mainClass>
                                 </transformer>
+                                <!-- POI y XmlBeans se registran por META-INF/services: si los
+                                     archivos de varios jars no se fusionan, unos pisan a otros
+                                     y el .docx no se puede escribir -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                             </transformers>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <!-- Las firmas de los jars originales no valen para el
+                                             jar fusionado: dejarlas provoca "Invalid signature
+                                             file digest" al arrancar -->
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>module-info.class</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                         </configuration>
                     </execution>
                 </executions>

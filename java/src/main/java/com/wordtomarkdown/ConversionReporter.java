@@ -24,20 +24,31 @@ public class ConversionReporter {
             lines.add("  Advertencias durante la conversión:");
             result.warnings().forEach(w -> lines.add("    [!] " + w));
         }
-        if (result.imagesExtracted() > 0) {
-            lines.add("  Imágenes extraídas: " + result.imagesExtracted()
-                + " → " + result.imageDir().getFileName() + "/");
+        if (result.imagesProcessed() > 0) {
+            lines.add("  " + imagesDone(result) + ": " + result.imagesProcessed()
+                + (result.imageDir() != null ? " → " + result.imageDir().getFileName() + "/" : ""));
         }
         if (result.hasImageErrors()) {
-            lines.add("  No se pudieron extraer " + result.imageErrors().size() + " imagen(es):");
+            lines.add("  No se pudieron " + imageVerb(result) + " " + result.imageErrors().size() + " imagen(es):");
             result.imageErrors().forEach(m -> lines.add("    [!] " + m));
         }
 
         lines.add("  OK: " + result.output().getName()
             + (result.hasImageErrors()
-                ? " (con " + result.imageErrors().size() + " imagen(es) sin extraer)"
+                ? " (con " + result.imageErrors().size() + " imagen(es) sin " + imageVerb(result) + ")"
                 : ""));
         return lines;
+    }
+
+    /** Las imágenes se extraen del .docx en un sentido y se insertan en él en el otro. */
+    private String imagesDone(ConversionResult result) {
+        return result.direction() == ConversionDirection.MARKDOWN_TO_WORD
+            ? "Imágenes insertadas"
+            : "Imágenes extraídas";
+    }
+
+    private String imageVerb(ConversionResult result) {
+        return result.direction() == ConversionDirection.MARKDOWN_TO_WORD ? "insertar" : "extraer";
     }
 
     /** Línea final de un lote de varios documentos. */

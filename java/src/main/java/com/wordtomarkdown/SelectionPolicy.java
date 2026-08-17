@@ -9,14 +9,11 @@ import java.util.List;
  * <p>Separa el criterio (¿se acepta?, ¿archivo o carpeta?, ¿qué se anota en el
  * registro?) de su aplicación a los componentes Swing, de modo que pueda probarse
  * sin necesidad de una pantalla.
+ *
+ * <p>Qué se acepta depende del sentido de la conversión, así que el conversor
+ * activo se recibe en cada llamada en lugar de fijarlo al construir la política.
  */
 public class SelectionPolicy {
-
-    private final ConversionService service;
-
-    public SelectionPolicy(ConversionService service) {
-        this.service = service;
-    }
 
     /**
      * Resultado de evaluar una ruta soltada.
@@ -37,19 +34,21 @@ public class SelectionPolicy {
         }
     }
 
-    public Decision decideDrop(File dropped) {
+    public Decision decideDrop(File dropped, Converter converter) {
         if (dropped == null || !dropped.exists()) {
             return Decision.rejected("Ignorado (no existe): " + (dropped == null ? "-" : dropped.getName()));
         }
 
+        ConversionDirection direction = converter.direction();
+
         if (dropped.isDirectory()) {
             return new Decision(true, true, dropped, List.of(
                 "Carpeta arrastrada: " + dropped.getAbsolutePath(),
-                "Documentos .docx encontrados: " + service.findDocxFiles(dropped).size()));
+                direction.inputKindPlural() + " encontrados: " + converter.findInputFiles(dropped).size()));
         }
 
-        if (!service.isDocx(dropped)) {
-            return Decision.rejected("Ignorado (no es un .docx): " + dropped.getName());
+        if (!converter.isInput(dropped)) {
+            return Decision.rejected("Ignorado (no es " + direction.inputKind() + "): " + dropped.getName());
         }
 
         return new Decision(true, false, dropped, List.of("Archivo arrastrado: " + dropped.getName()));

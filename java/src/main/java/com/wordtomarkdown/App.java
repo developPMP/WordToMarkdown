@@ -25,15 +25,23 @@ public class App extends JFrame {
     private JLabel lblFile;
     private JRadioButton rbFile;
     private JRadioButton rbFolder;
+    private JRadioButton rbToMarkdown;
+    private JRadioButton rbToWord;
     private boolean converting;
 
-    private final ConversionService service = new ConversionService();
-    private final SelectionPolicy selectionPolicy = new SelectionPolicy(service);
+    private final ConversionService wordToMarkdown = new ConversionService();
+    private final MarkdownToWordService markdownToWord = new MarkdownToWordService();
+    private final SelectionPolicy selectionPolicy = new SelectionPolicy();
     private final ConversionReporter reporter = new ConversionReporter();
 
     public App() {
-        super("Word a Markdown - Conversor");
+        super("Word y Markdown - Conversor");
         initUI();
+    }
+
+    /** Conversor correspondiente al sentido elegido en la ventana. */
+    private Converter converter() {
+        return rbToWord.isSelected() ? markdownToWord : wordToMarkdown;
     }
 
     private void initUI() {
@@ -48,7 +56,21 @@ public class App extends JFrame {
         // Panel superior: modo de selección + ruta seleccionada
         JPanel topPanel = new JPanel(new BorderLayout(0, 8));
 
-        // Fila 1: tipo de selección (archivo individual o carpeta completa)
+        // Fila 1: sentido de la conversión
+        JPanel directionPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
+        directionPanel.add(new JLabel("Convertir:"));
+
+        rbToMarkdown = new JRadioButton("Word → Markdown", true);
+        rbToWord = new JRadioButton("Markdown → Word");
+        ButtonGroup directionGroup = new ButtonGroup();
+        directionGroup.add(rbToMarkdown);
+        directionGroup.add(rbToWord);
+        rbToMarkdown.addActionListener(this::onDirectionChanged);
+        rbToWord.addActionListener(this::onDirectionChanged);
+        directionPanel.add(rbToMarkdown);
+        directionPanel.add(rbToWord);
+
+        // Fila 2: tipo de selección (archivo individual o carpeta completa)
         JPanel modePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         modePanel.add(new JLabel("Tipo de selección:"));
 
@@ -62,12 +84,15 @@ public class App extends JFrame {
         modePanel.add(rbFile);
         modePanel.add(rbFolder);
 
-        topPanel.add(modePanel, BorderLayout.NORTH);
+        JPanel optionsPanel = new JPanel(new GridLayout(2, 1, 0, 4));
+        optionsPanel.add(directionPanel);
+        optionsPanel.add(modePanel);
+        topPanel.add(optionsPanel, BorderLayout.NORTH);
 
-        // Fila 2: ruta seleccionada
+        // Fila 3: ruta seleccionada
         JPanel pathPanel = new JPanel(new BorderLayout(8, 0));
 
-        lblFile = new JLabel("Archivo .docx:");
+        lblFile = new JLabel(ConversionDirection.WORD_TO_MARKDOWN.pathLabel());
         pathPanel.add(lblFile, BorderLayout.WEST);
 
         txtFilePath = new JTextField();
@@ -95,7 +120,7 @@ public class App extends JFrame {
 
         JScrollPane scrollPane = new JScrollPane(txtLog);
         scrollPane.setBorder(BorderFactory.createTitledBorder(
-            "Registro (o arrastre aquí un .docx o una carpeta)"));
+            "Registro (o arrastre aquí un archivo o una carpeta)"));
         mainPanel.add(scrollPane, BorderLayout.CENTER);
 
         // Arrastrar y soltar sobre el área de registro equivale a usar "Seleccionar..."
@@ -118,9 +143,9 @@ public class App extends JFrame {
         btnCopyLog.addActionListener(e -> copyLog(getToolkit().getSystemClipboard()));
         bottomPanel.add(btnCopyLog);
 
-        btnConvert = new JButton("Convertir a Markdown");
+        btnConvert = new JButton(ConversionDirection.WORD_TO_MARKDOWN.actionLabel());
         btnConvert.setEnabled(false);
-        btnConvert.setPreferredSize(new Dimension(180, 32));
+        btnConvert.setPreferredSize(new Dimension(190, 32));
         btnConvert.addActionListener(this::onConvert);
         bottomPanel.add(btnConvert);
 
@@ -136,8 +161,17 @@ public class App extends JFrame {
         btnConvert.setEnabled(false);
     }
 
+    /**
+     * Al cambiar de sentido lo seleccionado tampoco sirve —un .docx no se
+     * convierte a Word— y cambian las etiquetas de la ventana.
+     */
+    private void onDirectionChanged(ActionEvent e) {
+        btnConvert.setText(converter().direction().actionLabel());
+        onModeChanged(e);
+    }
+
     private void updateModeLabel() {
-        lblFile.setText(rbFolder.isSelected() ? "Carpeta:" : "Archivo .docx:");
+        lblFile.setText(rbFolder.isSelected() ? "Carpeta:" : converter().direction().pathLabel());
     }
 
     /**
@@ -203,7 +237,7 @@ public class App extends JFrame {
      * <p>Visible para las pruebas.
      */
     boolean applyDroppedPath(File dropped) {
-        SelectionPolicy.Decision decision = selectionPolicy.decideDrop(dropped);
+        SelectionPolicy.Decision decision = selectionPolicy.decideDrop(dropped, converter());
         if (!decision.accepted()) {
             // Lo rechazado no es una carga nueva: se avisa sin borrar lo anterior
             decision.messages().forEach(this::log);
@@ -222,15 +256,18 @@ public class App extends JFrame {
 
     private void onSelectFile(ActionEvent e) {
         boolean folderMode = rbFolder.isSelected();
+        Converter converter = converter();
+        ConversionDirection direction = converter.direction();
 
         JFileChooser chooser = new JFileChooser();
         if (folderMode) {
-            chooser.setDialogTitle("Seleccionar carpeta con documentos Word");
+            chooser.setDialogTitle("Seleccionar carpeta con " + direction.inputKindPlural().toLowerCase());
             chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         } else {
-            chooser.setDialogTitle("Seleccionar documento Word");
+            chooser.setDialogTitle("Seleccionar " + direction.inputKind());
             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-            chooser.setFileFilter(new FileNameExtensionFilter("Documentos Word (*.docx)", "docx"));
+            chooser.setFileFilter(new FileNameExtensionFilter(
+                direction.fileFilterDescription(), direction.fileFilterExtensions()));
             chooser.setAcceptAllFileFilterUsed(false);
         }
 
@@ -242,7 +279,7 @@ public class App extends JFrame {
             btnConvert.setEnabled(true);
             if (folderMode) {
                 log("Carpeta seleccionada: " + selected.getAbsolutePath());
-                log("Documentos .docx encontrados: " + service.findDocxFiles(selected).size());
+                log(direction.inputKindPlural() + " encontrados: " + converter.findInputFiles(selected).size());
             } else {
                 log("Archivo seleccionado: " + selected.getName());
             }
@@ -251,6 +288,7 @@ public class App extends JFrame {
 
     private void onConvert(ActionEvent e) {
         boolean folderMode = rbFolder.isSelected();
+        Converter converter = converter();
         String inputPath = txtFilePath.getText().trim();
         if (inputPath.isEmpty()) {
             showError(folderMode
@@ -267,9 +305,10 @@ public class App extends JFrame {
                 showError("La carpeta seleccionada no existe o no es válida.");
                 return;
             }
-            pending = service.findDocxFiles(input);
+            pending = converter.findInputFiles(input);
             if (pending.isEmpty()) {
-                showError("La carpeta no contiene ningún archivo .docx.");
+                showError("La carpeta no contiene ningún archivo "
+                    + String.join(" ni ", converter.direction().inputExtensions()) + ".");
                 return;
             }
         } else {
@@ -296,8 +335,8 @@ public class App extends JFrame {
 
                 int converted = 0;
                 int failed = 0;
-                for (File docx : pending) {
-                    ConversionResult result = service.convert(docx);
+                for (File document : pending) {
+                    ConversionResult result = converter.convert(document);
                     reporter.describe(result).forEach(out);
                     if (result.success()) {
                         converted++;
@@ -337,6 +376,19 @@ public class App extends JFrame {
         return rbFolder.isSelected();
     }
 
+    ConversionDirection direction() {
+        return converter().direction();
+    }
+
+    void selectDirection(ConversionDirection direction) {
+        (direction == ConversionDirection.MARKDOWN_TO_WORD ? rbToWord : rbToMarkdown).setSelected(true);
+        onDirectionChanged(null);
+    }
+
+    String convertLabel() {
+        return btnConvert.getText();
+    }
+
     String selectedPath() {
         return txtFilePath.getText();
     }
@@ -368,6 +420,8 @@ public class App extends JFrame {
         btnSelect.setEnabled(!busy);
         rbFile.setEnabled(!busy);
         rbFolder.setEnabled(!busy);
+        rbToMarkdown.setEnabled(!busy);
+        rbToWord.setEnabled(!busy);
         updateClearState();
     }
 
@@ -455,6 +509,12 @@ public class App extends JFrame {
     }
 
     public static void main(String[] args) {
+        // POI registra sus mensajes con log4j, que sin implementación detrás
+        // escupe un error por consola al primer uso. Con esto usa el registro
+        // mínimo que trae la propia API y no molesta.
+        System.setProperty("log4j2.loggerContextFactory",
+            "org.apache.logging.log4j.simple.SimpleLoggerContextFactory");
+
         // Aplicar Look & Feel del sistema antes de crear la ventana
         try {
             UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());

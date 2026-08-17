@@ -54,7 +54,7 @@ class ConversionServiceTest {
         ConversionResult result = service.convert(docx.toFile());
 
         assertTrue(result.success(), () -> "error: " + result.errorMessage());
-        assertEquals(2, result.imagesExtracted());
+        assertEquals(2, result.imagesProcessed());
         assertFalse(result.hasImageErrors());
         assertTrue(Files.isRegularFile(folder.resolve("ConImagenes_images/image1.png")));
         assertTrue(Files.isRegularFile(folder.resolve("ConImagenes_images/image2.png")));
@@ -87,7 +87,7 @@ class ConversionServiceTest {
         ConversionResult result = service.convert(docx.toFile());
 
         assertTrue(result.success(), "el documento debe convertirse aunque falten imágenes");
-        assertEquals(0, result.imagesExtracted(), "ninguna imagen debió extraerse");
+        assertEquals(0, result.imagesProcessed(), "ninguna imagen debió extraerse");
         assertEquals(2, result.imageErrors().size());
 
         // La numeración es correlativa: sin doble incremento del contador

@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * <p>El flujo es {@code .docx → [Mammoth] → HTML → [flexmark] → .md}, ya que la
  * librería Java de Mammoth no ofrece conversión directa a Markdown.
  */
-public class ConversionService {
+public class ConversionService implements Converter {
 
     private static final String DOCX_EXTENSION = ".docx";
 
@@ -67,6 +67,21 @@ public class ConversionService {
 
     private final MarkdownCleaner cleaner = new MarkdownCleaner();
     private final WordNumbering numbering = new WordNumbering();
+
+    @Override
+    public ConversionDirection direction() {
+        return ConversionDirection.WORD_TO_MARKDOWN;
+    }
+
+    @Override
+    public boolean isInput(File file) {
+        return isDocx(file);
+    }
+
+    @Override
+    public List<File> findInputFiles(File folder) {
+        return findDocxFiles(folder);
+    }
 
     /** true si el archivo es un documento Word convertible. */
     public boolean isDocx(File file) {
@@ -108,6 +123,7 @@ public class ConversionService {
      * Convierte un documento y escribe el .md junto al original. Nunca lanza:
      * los fallos se describen en el {@link ConversionResult} devuelto.
      */
+    @Override
     public ConversionResult convert(File docx) {
         String baseName = baseNameOf(docx);
         File parent = docx.getAbsoluteFile().getParentFile();
@@ -158,7 +174,7 @@ public class ConversionService {
             Files.writeString(output.toPath(), clean, StandardCharsets.UTF_8);
 
             return new ConversionResult(
-                docx, output, true, null,
+                direction(), docx, output, true, null,
                 List.copyOf(warnings),
                 imagesOk.get(),
                 List.copyOf(imageErrors),
@@ -166,7 +182,7 @@ public class ConversionService {
             );
 
         } catch (Exception ex) {
-            return ConversionResult.failure(docx, output, imageDir, describeFailure(docx, ex));
+            return ConversionResult.failure(direction(), docx, output, imageDir, describeFailure(docx, ex));
         }
     }
 
@@ -253,7 +269,14 @@ public class ConversionService {
             "p[style-name='Subtitle'] => h2:fresh",
             "p[style-name='Subtítulo'] => h2:fresh",
             "p[style-name='TOC Heading'] => h1:fresh",
-            "p[style-name='Tabla de contenido'] => h1:fresh"
+            "p[style-name='Tabla de contenido'] => h1:fresh",
+            // Estilos propios de la conversión inversa ({@link WordStyles}): sin
+            // estas reglas, un .docx generado por el programa vuelve a Markdown
+            // perdiendo las citas, los bloques de código y el código en línea.
+            "p[style-name='Quote'] => blockquote:fresh",
+            // Cada línea del bloque es un párrafo: se unen en un solo <pre>.
+            "p[style-name='Code Block'] => pre:separator('\\n')",
+            "r[style-name='Code Char'] => code"
         ));
         for (int level = 1; level <= INDEX_LEVELS; level++) {
             // Cada nivel cuelga del anterior: "ul > li > ul > li:fresh"

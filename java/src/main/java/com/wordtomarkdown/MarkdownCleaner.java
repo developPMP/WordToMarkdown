@@ -471,29 +471,11 @@ public class MarkdownCleaner {
     }
 
     /**
-     * Identificador que los visores de Markdown generan para un encabezado:
-     * minúsculas, sin puntuación y con guiones en lugar de espacios. Se numeran
-     * los repetidos igual que hace GitHub, para no duplicar destinos.
+     * Identificador del encabezado tal como lo genera un visor de Markdown, una
+     * vez retirado lo que sea sintaxis y no texto (enlaces internos y escapes).
      */
     private String uniqueSlugOf(String headingText, Set<String> used) {
         String text = INTERNAL_LINK.matcher(headingText).replaceAll("$1").replace("\\", "");
-        StringBuilder slug = new StringBuilder();
-        for (char c : text.toLowerCase(Locale.ROOT).toCharArray()) {
-            if (Character.isLetterOrDigit(c) || c == '-') {
-                slug.append(c);
-            } else if (Character.isWhitespace(c) && !slug.isEmpty() && slug.charAt(slug.length() - 1) != '-') {
-                slug.append('-');
-            }
-        }
-        while (!slug.isEmpty() && slug.charAt(slug.length() - 1) == '-') {
-            slug.deleteCharAt(slug.length() - 1);
-        }
-
-        String base = slug.toString();
-        String candidate = base;
-        for (int repetition = 1; !used.add(candidate); repetition++) {
-            candidate = base + "-" + repetition;
-        }
-        return candidate;
+        return Slug.of(text, used);
     }
 }
